@@ -35,7 +35,7 @@ onMounted(async () => {
   if (!cur) return
   try {
     cache ??= await fetch(
-      'https://api.github.com/repos/dmmdekkd/douyin.ts/releases/latest',
+      'https://api.github.com/repos/CialloJS/douyin.ts/releases/latest',
       { headers: { accept: 'application/vnd.github+json' } },
     ).then(async res => {
       if (!res.ok) return null
@@ -46,7 +46,7 @@ onMounted(async () => {
       if (!d.tag_name) return null
       return {
         tag: d.tag_name,
-        link: d.html_url ?? 'https://github.com/dmmdekkd/douyin.ts/releases',
+        link: d.html_url ?? 'https://github.com/CialloJS/douyin.ts/releases',
       }
     })
   } catch {

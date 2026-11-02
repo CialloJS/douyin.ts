@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 文档页底部贡献者：圆形头像 + 名称，数据在此维护，新增贡献者往数组里加即可
 const contributors = [
-  { name: 'dmmdekkd', url: 'https://github.com/dmmdekkd', avatar: 'https://github.com/dmmdekkd.png?size=96' },
+  { name: 'CialloJS', url: 'https://github.com/CialloJS', avatar: 'https://github.com/CialloJS.png?size=96' },
 ]
 </script>
 

@@ -56,7 +56,7 @@ const themeConfig = {
     ],
   },
   socialLinks: [
-    { icon: { svg: socialIcons.github }, link: 'https://github.com/dmmdekkd/douyin.ts', ariaLabel: 'GitHub' },
+    { icon: { svg: socialIcons.github }, link: 'https://github.com/CialloJS/douyin.ts', ariaLabel: 'GitHub' },
     { icon: { svg: socialIcons.npm }, link: 'https://www.npmjs.com/package/douyin.ts', ariaLabel: 'npm' },
     { icon: { svg: socialIcons.douyin }, link: 'https://www.douyin.com/user/MS4wLjABAAAAC94yjqHIIjjYNiiihc1tLMEsTe4z74SUUoThvTw1j3qbu9L972pDgQj4WhaxrnFA', ariaLabel: '抖音' },
     { icon: { svg: socialIcons.bilibili }, link: 'https://space.bilibili.com/1234796277', ariaLabel: '哔哩哔哩' },
@@ -75,14 +75,14 @@ const themeConfig = {
     },
   },
   editLink: {
-    pattern: 'https://github.com/dmmdekkd/douyin.ts/edit/main/:path',
+    pattern: 'https://github.com/CialloJS/douyin.ts/edit/main/:path',
     text: '在 GitHub 上编辑此页',
   },
   lightModeSwitchTitle: '切换到亮色模式',
   darkModeSwitchTitle: '切换到暗色模式',
   footer: {
     message: '基于 MIT 许可发布',
-    copyright: 'Copyright © 2026 dmmdekkd',
+    copyright: 'Copyright © 2026 CialloJS',
   },
   notFound: {
     code: '404',

@@ -2,14 +2,14 @@
   "name": "douyin.ts",
   "version": "0.6.7",
   "description": "抖音 Node SDK",
-  "author": "dmmdekkd",
-  "homepage": "https://github.com/dmmdekkd/douyin.ts#readme",
+  "author": "CialloJS",
+  "homepage": "https://github.com/CialloJS/douyin.ts#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dmmdekkd/douyin.ts.git"
+    "url": "git+https://github.com/CialloJS/douyin.ts.git"
   },
   "bugs": {
-    "url": "https://github.com/dmmdekkd/douyin.ts/issues"
+    "url": "https://github.com/CialloJS/douyin.ts/issues"
   },
   "type": "module",
   "packageManager": "pnpm@10.34.5",

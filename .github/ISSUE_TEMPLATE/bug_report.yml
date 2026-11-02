@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         ## 提交前请先花一分钟确认
-        Issue 用于跟踪**可复现、可定位的 SDK 缺陷**。安装咨询、登录风控、失效接口等问题，请先查阅[项目文档](https://github.com/dmmdekkd/douyin.ts)并前往 [Discussions](https://github.com/dmmdekkd/douyin.ts/discussions) 交流。
+        Issue 用于跟踪**可复现、可定位的 SDK 缺陷**。安装咨询、登录风控、失效接口等问题，请先查阅[项目文档](https://github.com/CialloJS/douyin.ts)并前往 [Discussions](https://github.com/CialloJS/douyin.ts/discussions) 交流。
         > [!IMPORTANT]
         > 请把"发生了什么、如何复现、完整日志、运行环境"一次写清。仅填写"如题""如图""报错了"，或使用 `*`、`test` 等内容占位，会被自动标记为 `needs-info`。
         > [!CAUTION]

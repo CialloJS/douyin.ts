@@ -2,9 +2,8 @@
 
 抖音 IM 开发 SDK。TypeScript 7 · 纯 ESM · Node ≥ 20。
 
-完整文档：<https://dmmdekkd.github.io/douyin.ts/>
+完整文档：<https://CialloJS.github.io/douyin.ts/>
 
-参考[douyin-im](https://github.com/zhinjs/douyin-im)
 支持：扫码登录（含短信/密码/滑块等二次验证）、收消息（WS 推送）、发消息（HTTP 通道）、富媒体上传、好友/群管理、会话状态与群事件。
 
 ## 安装
@@ -141,3 +140,7 @@ new Bot({
 ## 登录二次验证
 
 触发短信/密码验证时，`login` 需要 `onMfa` 回调返回验证码/密码；未提供且服务端无免输入方式（上行短信）时登录会失败，请在调用处接入交互输入。
+
+## 致谢 / Credits
+
+本项目参考了 `https://github.com/zhinjs/douyin-im` 的实现思路，感谢原作者的工作。
