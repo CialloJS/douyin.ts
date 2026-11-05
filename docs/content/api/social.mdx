@@ -1,0 +1,146 @@
+# social
+
+import { Note, Tip } from '@/components/mdx/callout'
+
+## 概览
+
+社交域：关注/好友关系列表、可能认识的人、关注操作与聊天气泡详情。
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `spotlight` | `{ count?, source? }` | `RelationPage` |
+| `familiar` | `{ count?, cursor?, recommendType? }` | `SocialUser[]` |
+| `follow` | `userId, secUid, { type?, tag? }` | `void` |
+| `bubble` | `bubbleId, { needCurrent? }` | `Bubble[]` |
+
+<Note>
+关系列表与资料查询都以 **secUid** 为主要键；`follow` 需要同时提供数字 `userId` 与 `secUid`。
+</Note>
+
+### spotlight
+
+关注/好友关系列表，含推荐与真实网络标记。
+
+```ts
+bot.social.spotlight(options?: { count?: number; source?: string }): Promise<RelationPage>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `options.count` | `number` | `100` | 拉取条数 |
+| `options.source` | `string` | `'coldup_full'` | 列表来源，原样透传 |
+
+返回 `RelationPage`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `users` | `SocialUser[]` | 关系用户列表 |
+| `hasMore` | `boolean` | 是否还有下一页 |
+| `maxTime` | `number` | 上游分页字段 |
+| `minTime` | `number` | 上游分页字段 |
+
+`SocialUser` 字段：`uid`、`secUid`、`nickname`、`avatar?`、`signature?`、`uniqueId?`、`followStatus`、`followerStatus`、`raw`。
+
+```ts
+const page = await bot.social.spotlight({ count: 100 })
+
+for (const u of page.users) {
+  console.log(u.nickname, u.followStatus)
+}
+```
+
+- 失败：不做业务状态校验，取不到数据时返回空列表；网络异常原样抛出。
+
+### familiar
+
+可能认识的人。
+
+```ts
+bot.social.familiar(options?: { count?: number; cursor?: number; recommendType?: number }): Promise<SocialUser[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `options.count` | `number` | `100` | 条数 |
+| `options.cursor` | `number` | `0` | 起始游标 |
+| `options.recommendType` | `number` | `22` | 推荐类型，原样透传 |
+
+```ts
+const list = await bot.social.familiar({ count: 50 })
+console.log(list.map(u => u.nickname))
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+### follow
+
+关注用户。响应体为空，只能以 HTTP 状态判定成败。
+
+```ts
+bot.social.follow(
+  userId: string,
+  secUid: string,
+  options?: { type?: number; tag?: string },
+): Promise<void>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `userId` | `string` | — | 对方数字 uid |
+| `secUid` | `string` | — | 对方 sec uid |
+| `options.type` | `number` | `0` | 关注类型，原样透传 |
+| `options.tag` | `string` | `'frienddetail'` | 关系标签 |
+
+```ts
+await bot.social.follow(user.uid, user.secUid)
+```
+
+<Tip>
+设备已注册时会自动带上与设备绑定的 `verifyFp`，无需手动传。
+</Tip>
+
+- 失败：HTTP 非 2xx → `err(上游响应文本)`；响应为空不代表失败，HTTP 2xx 即视为成功。
+
+### bubble
+
+聊天气泡详情，`current` 标记是否为当前使用中的气泡。
+
+```ts
+bot.social.bubble(bubbleId: string, options?: { needCurrent?: boolean }): Promise<Bubble[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `bubbleId` | `string` | — | 气泡 id（`bubble_id_str`） |
+| `options.needCurrent` | `boolean` | `true` | 是否附带当前使用标记 |
+
+返回 `Bubble`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 气泡 id |
+| `name` | `string` | 气泡名 |
+| `type` | `number` | 气泡类型 |
+| `source` | `number` | 来源 |
+| `description` | `string?` | 描述 |
+| `lightPreview` | `string?` | 亮色预览图 |
+| `darkPreview` | `string?` | 暗色预览图 |
+| `current` | `boolean` | 是否为当前使用中的气泡 |
+| `raw` | `Record<string, unknown>` | 未建模字段原样透传 |
+
+```ts
+const list = await bot.social.bubble(bubbleId)
+const current = list.find(b => b.current)
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+## 错误
+
+| 来源 | `err.data` |
+|------|------------|
+| 上游业务失败 | 上游响应体原文（envelope 或 JSON） |
+| SDK 前置校验 | 失败的字段对象 |
+| 网络或解析失败 | 原生异常，不做包装 |
+
+`err.message` 恒为常量 `sdk`，不要解析字符串。完整模型见 [错误处理](/docs/guide/error)。

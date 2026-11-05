@@ -2,7 +2,9 @@ node_modules
 dist
 /scripts
 *.log
-docs/.vitepress/cache
-docs/.vitepress/dist
+docs/.next
+docs/out
+.tscanner
 demo/session.json
 demo/qrcode.png
+docs/.next

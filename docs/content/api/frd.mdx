@@ -1,0 +1,142 @@
+# frd
+
+import { Note, Warn } from '@/components/mdx/callout'
+
+## 概览
+
+好友域：拉取好友列表、查看好友申请并同意或拒绝。
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `list` | `{ cursor?, count? }` | `Array<FriendInfo & { chatId: string }>` |
+| `requests` | `status?: FriendRequestStatus` | `FriendRequestInfo[]` |
+| `approve` | `uid: string` | `ActionResult` |
+| `reject` | `uid: string` | `ActionResult` |
+
+<Note>
+`chatId` 统一为字符串，直接从返回项取，不要自己拼会话地址；也可用 `chatIdOf` 由 `conversationId` / `conversationShortId` / `conversationType` 构造。
+</Note>
+
+### list
+
+好友列表。数据来自 `familiar/list`，按页循环拉全量，再与 Cookie 会话列表按 uid 交叉匹配补齐会话 ID。
+
+```ts
+bot.frd.list(options?: { cursor?: number; count?: number }): Promise<Array<FriendInfo & { chatId: string }>>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `options.cursor` | `number` | `0` | 起始翻页游标 |
+| `options.count` | `number` | `100` | 单页条数；缺省自动翻页拉全量，不是返回上限 |
+
+返回项在 `FriendInfo` 基础上补 `chatId`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识，可直接用于发送 |
+| `uid` | `string` | 好友数字 uid |
+| `secUid` | `string?` | sec uid |
+| `nickname` | `string` | 昵称，备注名优先 |
+| `conversationId` | `string` | 会话 id，无历史会话时为空串 |
+| `conversationShortId` | `string` | 会话短 id，无历史会话时为空串 |
+| `lastMessage` | `ChatMessage?` | 最后一条消息 |
+| `lastMessageTime` | `number` | 最后消息时间 |
+| `unreadCount` | `number` | 未读数 |
+
+```ts
+const friends = await bot.frd.list({ count: 50 })
+
+for (const f of friends) {
+  console.log(f.nickname, f.chatId)
+}
+```
+
+<Warn>
+`familiar/list` 不含会话 ID；没有历史会话的好友 `chatId` 形如 `1::`，只能展示，发送时会因缺少完整会话地址而失败。
+</Warn>
+
+- 失败：`familiar/list` 业务状态非 0 时终止翻页并返回已收集结果，不抛 `SdkError`；网络异常或 JSON 解析失败原样抛出。
+
+### requests
+
+好友申请列表，内部自动翻页拉全量。
+
+```ts
+bot.frd.requests(status?: FriendRequestStatus): Promise<FriendRequestInfo[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `status` | `number` | `1` | `1` 待处理 / `2` 已通过 / `3` 已拒绝 / `4` 失效 |
+
+返回 `FriendRequestInfo`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `applicantUid` | `string` | 申请人数字 uid（同意/拒绝时传入） |
+| `nickname` | `string?` | 申请人昵称 |
+| `avatar` | `string?` | 申请人头像 |
+| `requestedAt` | `string?` | 申请时间 |
+| `status` | `number` | 申请状态，取值同上 |
+| `message` | `string?` | 申请留言 |
+| `ext` | `Record<string, string>?` | 原始扩展字段 |
+
+```ts
+const pending = await bot.frd.requests()
+
+for (const r of pending) {
+  console.log(r.applicantUid, r.nickname, r.message)
+}
+```
+
+- 失败：业务状态非 0 → `err(上游响应体)`；网络异常原样抛出。
+
+### approve
+
+同意好友申请，建立好友关系。
+
+```ts
+bot.frd.approve(uid: string): Promise<ActionResult>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `uid` | `string` | — | 申请人数字 uid，取 `requests()` 返回项的 `applicantUid` |
+
+返回 `ActionResult`：`statusCode` 为 0 即成功，`statusMsg` 为上游提示。
+
+```ts
+const pending = await bot.frd.requests()
+if (pending[0]) await bot.frd.approve(pending[0].applicantUid)
+```
+
+- 失败：动作类方法业务失败不抛错，`statusCode` 非 0 即失败，原因在 `statusMsg`；仅网络异常抛出。
+
+### reject
+
+拒绝好友申请。
+
+```ts
+bot.frd.reject(uid: string): Promise<ActionResult>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `uid` | `string` | — | 申请人数字 uid |
+
+```ts
+await bot.frd.reject(pending[0].applicantUid)
+```
+
+- 失败：同上，业务失败看 `statusCode`，不抛 `SdkError`。
+
+## 错误
+
+| 来源 | `err.data` |
+|------|------------|
+| 上游业务失败 | 上游响应体原文（envelope 或 JSON） |
+| SDK 前置校验 | 失败的字段对象，如 `err({ chatId })` |
+| 网络或解析失败 | 原生异常，不做包装 |
+
+`err.message` 恒为常量 `sdk`，不要解析字符串。完整模型见 [错误处理](/docs/guide/error)。

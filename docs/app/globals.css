@@ -1,0 +1,36 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  --color-brand: #fe2c55;
+  --color-brand-strong: #e61e4d;
+  --color-cyanish: #25f4ee;
+  --color-ink: #0b0b0f;
+}
+
+/* 品牌色替换 HeroUI 强调色，同时保留其明暗两套语义 */
+:root {
+  --accent: oklch(0.62 0.24 18);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-brand) 24%, transparent);
+}
+
+/* 代码块细滚动条，避免横向滚动条抢视觉 */
+.code-scroll {
+  scrollbar-width: thin;
+}

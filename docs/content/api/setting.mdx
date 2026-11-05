@@ -1,0 +1,98 @@
+# setting
+
+import { Note } from '@/components/mdx/callout'
+
+## 概览
+
+设置域：桌面消息提醒、账号综合设置与合规/青少年模式设置，都是只读查询。
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `desktop` | — | `DesktopSetting` |
+| `account` | — | `UserSettings` |
+| `compliance` | — | `ComplianceSetting` |
+
+<Note>
+三个方法都无入参，返回的是当前账号在服务端的设置快照；未建模字段统一放在 `raw`。
+</Note>
+
+### desktop
+
+桌面消息提醒设置。
+
+```ts
+bot.setting.desktop(): Promise<DesktopSetting>
+```
+
+返回 `DesktopSetting`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `messageAlert` | `number` | 消息提醒开关，`1` 开 |
+| `showMessageDetail` | `number` | 显示消息详情开关，`1` 开（上游字段拼写即 `swtich`） |
+
+```ts
+const s = await bot.setting.desktop()
+console.log(s.messageAlert, s.showMessageDetail)
+```
+
+- 失败：`base_resp.status_code` 非 0 → `err(上游响应体)`。
+
+### account
+
+账号综合设置，字段庞大，未建模字段在 `raw` 透传全量。
+
+```ts
+bot.setting.account(): Promise<UserSettings>
+```
+
+返回 `UserSettings`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `chatSet` | `number` | 私密账号等级 |
+| `teenMode` | `number` | 青少年模式状态 |
+| `isMinor` | `boolean` | 是否未成年账号 |
+| `settingsVersion` | `string?` | 设置版本 |
+| `raw` | `Record<string, unknown>` | 未建模字段原样透传 |
+
+```ts
+const s = await bot.setting.account()
+console.log(s.chatSet, s.teenMode, s.isMinor)
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+### compliance
+
+合规/青少年模式设置。
+
+```ts
+bot.setting.compliance(): Promise<ComplianceSetting>
+```
+
+返回 `ComplianceSetting`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `minorControlType` | `number` | 未成年人管控类型 |
+| `isMinor` | `boolean` | 是否未成年账号 |
+| `teenMode` | `number` | 青少年模式状态 |
+| `raw` | `Record<string, unknown>` | 未建模字段原样透传 |
+
+```ts
+const c = await bot.setting.compliance()
+console.log(c.minorControlType, c.isMinor)
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+## 错误
+
+| 来源 | `err.data` |
+|------|------------|
+| 上游业务失败 | 上游响应体原文（envelope 或 JSON） |
+| SDK 前置校验 | 失败的字段对象 |
+| 网络或解析失败 | 原生异常，不做包装 |
+
+`err.message` 恒为常量 `sdk`，不要解析字符串。完整模型见 [错误处理](/docs/guide/error)。

@@ -1,0 +1,184 @@
+# watch
+
+import { Note, Warn } from '@/components/mdx/callout'
+
+## 概览
+
+作品播放域：弹幕、播放进度、短剧/合集观看记录、观看历史与内容安全等级。
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `danmaku` | `itemId, { groupId?, startTime?, endTime?, duration?, token? }` | `Danmaku[]` |
+| `progress` | `itemId, progress, duration` | `void` |
+| `series` | `seriesId, itemId, episode` | `void` |
+| `mix` | `mixId, itemId, episode` | `void` |
+| `history` | `awemeId, { authorId?, preItemId? }` | `void` |
+| `safety` | `itemIds: string[]` | `Array<Record<string, unknown>>` |
+
+<Note>
+这里的时间与进度参数都是毫秒，`itemId` / `awemeId` 是作品 id，不是会话 id。
+</Note>
+
+## 播放
+
+### danmaku
+
+拉取作品在某个时间段内的弹幕。
+
+```ts
+bot.watch.danmaku(
+  itemId: string,
+  options?: {
+    groupId?: string
+    startTime?: number
+    endTime?: number
+    duration?: number
+    token?: string
+  },
+): Promise<Danmaku[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `itemId` | `string` | — | 作品 id |
+| `options.groupId` | `string` | `itemId` | 弹幕分组 id |
+| `options.startTime` | `number` | `0` | 起始毫秒偏移 |
+| `options.endTime` | `number` | `0` | 结束毫秒偏移 |
+| `options.duration` | `number` | `0` | 视频总时长（毫秒） |
+| `options.token` | `string` | `''` | 认证 token，一般留空 |
+
+返回 `Danmaku`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 弹幕 id |
+| `itemId` | `string` | 作品 id |
+| `userId` | `string` | 发送者数字 uid |
+| `offsetTime` | `number` | 出现时刻（毫秒偏移） |
+| `text` | `string` | 弹幕文本 |
+| `diggCount` | `number` | 点赞数 |
+| `showDigg` | `boolean` | 是否展示点赞 |
+
+```ts
+const list = await bot.watch.danmaku(itemId, { startTime: 0, endTime: 10000 })
+console.log(list.map(d => d.text))
+```
+
+- 失败：不做业务状态校验，无弹幕时返回空数组；网络异常原样抛出。
+
+### progress
+
+上报播放进度，服务端据此续播与记历史。
+
+```ts
+bot.watch.progress(itemId: string, progress: number, duration: number): Promise<void>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `itemId` | `string` | — | 作品 id |
+| `progress` | `number` | — | 当前播放位置（毫秒） |
+| `duration` | `number` | — | 视频总时长（毫秒） |
+
+```ts
+await bot.watch.progress(itemId, 3000, 60000)
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+## 观看记录
+
+### series
+
+短剧剧集观看记录。
+
+```ts
+bot.watch.series(seriesId: string, itemId: string, episode: number): Promise<void>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `seriesId` | `string` | — | 短剧 id |
+| `itemId` | `string` | — | 剧集作品 id |
+| `episode` | `number` | — | 集数 |
+
+```ts
+await bot.watch.series(seriesId, itemId, 3)
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+### mix
+
+合集观看记录。
+
+```ts
+bot.watch.mix(mixId: string, itemId: string, episode: number): Promise<void>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `mixId` | `string` | — | 合集 id |
+| `itemId` | `string` | — | 合集内作品 id |
+| `episode` | `number` | — | 集数 |
+
+```ts
+await bot.watch.mix(mixId, itemId, 2)
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+### history
+
+写入观看历史。
+
+```ts
+bot.watch.history(awemeId: string, options?: { authorId?: string; preItemId?: string }): Promise<void>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `awemeId` | `string` | — | 作品 id |
+| `options.authorId` | `string` | `''` | 作者数字 uid |
+| `options.preItemId` | `string` | `''` | 上一条作品 id，空表示首次写入 |
+
+```ts
+await bot.watch.history(awemeId, { authorId })
+```
+
+- 失败：`status_code` 或 `BaseResp.StatusCode` 非 0 → `err(上游响应体)`。
+
+## 内容安全
+
+### safety
+
+批量查作品安全等级。
+
+```ts
+bot.watch.safety(itemIds: string[]): Promise<Array<Record<string, unknown>>>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `itemIds` | `string[]` | — | 作品 id 列表 |
+
+```ts
+const result = await bot.watch.safety([itemId])
+console.log(result)
+```
+
+<Warn>
+上游样本中 `result` 常为空，非空结构未建模，SDK 原样透传，调用方需自行判断字段。
+</Warn>
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+## 错误
+
+| 来源 | `err.data` |
+|------|------------|
+| 上游业务失败 | 上游响应体原文（envelope 或 JSON） |
+| SDK 前置校验 | 失败的字段对象 |
+| 网络或解析失败 | 原生异常，不做包装 |
+
+`err.message` 恒为常量 `sdk`，不要解析字符串。完整模型见 [错误处理](/docs/guide/error)。

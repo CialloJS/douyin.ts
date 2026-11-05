@@ -1,0 +1,108 @@
+import { Warn } from '@/components/mdx/callout'
+
+# message
+
+新消息到达时触发；已有消息被编辑后重推时走 `message:edited`。
+
+## 事件含义
+
+`message` 表示收到一条私聊或群聊消息，载荷是已解析的入站消息，可直接回传 `bot.msg.*`。
+`message:edited` 表示一条已有消息被编辑，载荷为编辑后的全文，`serverMessageId` 回填为原消息 id。
+
+两者互斥：带编辑标记的推送只发 `message:edited`，不再发 `message`。
+
+## 事件对象字段
+
+两个事件的载荷都是 `BotMessage`（`InboundMessage` 加 `chatId`、`senderNickname`）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | `string` | 内容类型，取值见下方「消息类型」 |
+| `text` | `string` | 展示文本，一律可读；媒体无文案时为空串 |
+| `ats` | `TextMention[]?` | 文本 @ 提及，元素含 `uid`、`location`、`length`；无提及时缺省 |
+| `chatId` | `string` | 会话标识，直接传给 `bot.msg.*`；格式不承诺稳定 |
+| `senderUid` | `string` | 发送者数字 uid |
+| `senderSecUid` | `string?` | 发送者 sec uid（推送带则下发） |
+| `senderNickname` | `string?` | 发送者昵称；缓存未命中时异步补拉，失败则缺省 |
+| `conversationId` | `string` | 会话 id（私聊形如 `0:1:uid:uid`） |
+| `conversationShortId` | `string` | 会话短 id |
+| `conversationType` | `number` | `1` 私聊 / `2` 群聊 |
+| `messageType` | `number` | 原始消息类型（7 文本、27 图片等） |
+| `serverMessageId` | `string?` | 消息 id，撤回、表情回应、已读定位用 |
+| `createTime` | `string?` | 消息时间，微秒时间戳字符串 |
+| `indexInConversation` | `string?` | 会话内游标 |
+| `indexInConversationV2` | `string?` | 会话内游标 v2 |
+| `reference` | `{ referencedMessageId: string; hint: string; rootMessageId?: string }?` | 引用（回复）信息 |
+| `threadId` | `string?` | 盖楼楼层 id，楼内消息均有 |
+| `threadShortId` | `string?` | 盖楼短 id |
+| `isThreadRoot` | `boolean?` | `true` 表示盖楼根消息（正文为空） |
+| `cmd` | `number` | 推送命令号 |
+| `inboxType` | `number?` | 收件箱类型（推送带则下发） |
+| `ext` | `Record<string, string>?` | f:9 上下文键值 |
+| `raw` | `object` | 原始推送解析结果 |
+
+## 消息类型
+
+| `type` | 载荷字段 | 说明 |
+|--------|----------|------|
+| `text` | `text`、`ats?` | 纯文本 |
+| `image` | `image` | 图片资源 |
+| `video` | `video` | 视频资源，事件下发前自动换取 `video.url` |
+| `file` | `file` | 文件资产 |
+| `share` | `share` | 作品分享卡 |
+| `userCard` | `user` | 用户名片 |
+| `forward` | `nodes` | 合并转发节点 |
+| `audio` | `audio` | 语音，`{ urls, uri }` |
+| `emoji` | `emoji` | 表情资源路径或直链 |
+| `link` | `link` | 链接卡 |
+| `chains` | `chains` | 接龙 |
+| `card` | `card` | 互动卡 |
+| `groupCard` | `groupCard` | 群邀请卡 |
+| `location` | `location` | 位置 |
+| `unknown` | `raw` | 未识别，保留原始内容 |
+
+各载荷的完整字段见 [消息与事件](/docs/guide/message)。
+
+## 消息编辑
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `editCount` | `number` | 编辑次数，编辑重推后 `≥1` |
+| `editInfo` | `{ contentIsEdited: boolean; editorUid: string; editTime: string }` | 编辑元数据 |
+| `orgMsgType` | `number?` | 编辑前原始消息类型 |
+| `serverMessageId` | `string?` | 已回填为原消息 id，可与之前的 `message` 事件关联 |
+
+编辑重推在自发过滤之前处理，因此自己编辑消息同样会触发。
+
+## 注册示例
+
+```ts
+bot.on('message', async msg => {
+  if (msg.type === 'text' && msg.text === 'ping') {
+    await bot.msg.send(msg.chatId, { type: 'text', text: 'pong' })
+  }
+
+  if (msg.type === 'video' && msg.video.url) {
+    console.log(`视频地址：${msg.video.url.mainUrl}`)
+  }
+})
+```
+
+```ts
+bot.on('message:edited', msg => {
+  console.log(`${msg.serverMessageId} 被编辑 ${msg.editCount} 次：${msg.text}`)
+})
+```
+
+回调按注册顺序调用；可用 `bot.off('message', fn)` 取消订阅。
+
+## 注意事项
+
+<Warn>
+默认过滤自己发送的消息；需要感知自发消息时，在构造 `Bot` 时传 `selfMessage: true`。
+</Warn>
+
+- 事件下发前会补拉发送者昵称与视频播放地址；补拉失败不阻塞，相关字段缺省。补拉是异步的，连续消息的回调先后不保证与推送顺序完全一致。
+- `messageType >= 50000` 的命令帧不走 `message`：`50001` / `50013` / `50018` 分别是 [status](/docs/events/status)、[read](/docs/events/read)、[voip](/docs/events/voip)，`1001` / `50011` 等系统帧走 [notice](/docs/events/notice)；盖楼根消息（50002）例外，仍进 `message`。
+- 群系统消息中已识别的成员进出、群名/头像变更、群解散走 `notice`；未识别的 `1001` 按 `locale_resources` 模板渲染为 `text`。
+- 未识别的消息类型统一为 `unknown`，原文保留在 `raw`。

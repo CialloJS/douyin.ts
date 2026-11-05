@@ -1,0 +1,102 @@
+# notice
+
+import { Note, Tip } from '@/components/mdx/callout'
+
+## 概览
+
+通知域：各分组未读数与通知列表，常用于红点轮询。
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `count` | — | `NoticeCount[]` |
+| `list` | `{ count?, group?, maxTime?, minTime?, markRead? }` | `NoticePage` |
+
+<Note>
+`notice.count()` 只给未读数，`notice.list()` 才返回通知条目；两者都是主动查询，不依赖长连推送。
+</Note>
+
+### count
+
+各通知分组的未读数。
+
+```ts
+bot.notice.count(): Promise<NoticeCount[]>
+```
+
+返回 `NoticeCount`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `group` | `number` | 分组 id，`401` 互动 / `924` 其他 |
+| `count` | `number` | 未读数 |
+| `dotCount` | `number` | 红点未读数（含已读聚合） |
+| `latestTime` | `number` | 最新通知时间 |
+| `showType` | `number` | 展示类型 |
+| `interactiveShowType` | `number` | 互动展示类型 |
+
+```ts
+const counts = await bot.notice.count()
+
+for (const c of counts) {
+  console.log(c.group, c.dotCount)
+}
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+### list
+
+通知列表，缺省互动分组 `401`。
+
+```ts
+bot.notice.list(options?: {
+  count?: number
+  group?: number
+  maxTime?: number
+  minTime?: number
+  markRead?: boolean
+}): Promise<NoticePage>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `options.count` | `number` | `20` | 单页条数 |
+| `options.group` | `number` | `401` | 通知分组，`401` 互动 / `924` 其他 |
+| `options.maxTime` | `number` | `0` | 上翻游标（旧通知） |
+| `options.minTime` | `number` | `1` | 下翻游标（新通知） |
+| `options.markRead` | `boolean` | `true` | 拉取即标记已读；传 `false` 只拉取不标记 |
+
+返回 `NoticePage`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `list` | `Notice[]` | 通知条目，`v2` 结构优先 |
+| `hasMore` | `boolean` | 是否还有更多 |
+| `maxTime` | `number` | 下一页上翻游标 |
+| `minTime` | `number` | 下一页下翻游标 |
+
+`Notice` 字段：`nid`、`type`、`createTime`、`raw`（未建模字段原样透传，`type` 决定分组结构）。
+
+```ts
+const page = await bot.notice.list({ count: 20, group: 401 })
+
+for (const n of page.list) {
+  console.log(n.nid, n.type, n.createTime)
+}
+```
+
+<Tip>
+分页时把返回的 `maxTime` / `minTime` 作为下一次请求的同名游标；轮询红点用 `count()` 更轻量。
+</Tip>
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+## 错误
+
+| 来源 | `err.data` |
+|------|------------|
+| 上游业务失败 | 上游响应体原文（envelope 或 JSON） |
+| SDK 前置校验 | 失败的字段对象 |
+| 网络或解析失败 | 原生异常，不做包装 |
+
+`err.message` 恒为常量 `sdk`，不要解析字符串。完整模型见 [错误处理](/docs/guide/error)。

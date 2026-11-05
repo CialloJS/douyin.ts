@@ -1,0 +1,261 @@
+# user
+
+import { Note, Warn } from '@/components/mdx/callout'
+
+## 概览
+
+用户域：自身账号信息、他人资料查询与在线状态。
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `self` | — | `{ uid?, nickname?, avatar? }` |
+| `account` | — | `AccountInfo` |
+| `beatToken` | `scene?: string` | `void` |
+| `info` | `secUids: string[]` | `UserInfo[]` |
+| `profileScene` | `secUid: string` | `ProfileDetail` |
+| `profileOther` | `secUid: string` | `ProfileDetail` |
+| `profileSelf` | — | `ProfileDetail` |
+| `onlineStatus` | `secUserIds, source?` | `OnlineItem[]` |
+| `heartbeat` | — | `void` |
+| `activeSwitch` | — | `number` |
+
+<Note>
+除 `self` / `profileSelf` 外，他人资料查询都以 **secUid** 为键；secUid 可取自消息的 `senderSecUid`、群成员的 `secUid` 或好友列表项的 `secUid`。
+</Note>
+
+## 账号
+
+### self
+
+获取自身资料，登录收尾与 `Bot` 构造内部也用它取 uid。
+
+```ts
+bot.user.self(): Promise<{ uid?: string; nickname?: string; avatar?: string }>
+```
+
+```ts
+const me = await bot.user.self()
+console.log(me.uid, me.nickname, me.avatar)
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `uid` | `string?` | 自身数字 uid，与 `bot.id` 一致 |
+| `nickname` | `string?` | 昵称 |
+| `avatar` | `string?` | 真实头像 URL |
+
+- 失败：不做业务状态校验，登录态失效时可能返回空对象；网络异常原样抛出。
+
+### account
+
+passport 账号详情（登录态）。
+
+```ts
+bot.user.account(): Promise<AccountInfo>
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `userId` | `string` | 数字 uid |
+| `secUserId` | `string` | sec uid |
+| `name` | `string?` | 默认昵称 |
+| `screenName` | `string?` | 显示昵称 |
+| `avatar` | `string?` | 头像 URL；passport 下发的是 mosaic 占位图 |
+| `mobile` | `string?` | 绑定手机 |
+| `email` | `string?` | 绑定邮箱 |
+| `gender` | `number?` | 性别 |
+| `hasPassword` | `boolean?` | 是否设置密码 |
+| `createTime` | `number?` | 注册时间戳 |
+| `raw` | `Record<string, unknown>` | 未建模字段原样透传 |
+
+```ts
+const a = await bot.user.account()
+console.log(a.userId, a.mobile)
+```
+
+<Warn>
+`account().avatar` 是 passport 的占位图，真实头像请用 `self().avatar` 或 `profileSelf().avatar`。
+</Warn>
+
+- 失败：不做业务状态校验；网络异常原样抛出。
+
+### beatToken
+
+passport 令牌心跳，长时间在线时周期调用续杯防掉线。
+
+```ts
+bot.user.beatToken(scene?: string): Promise<void>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `scene` | `string` | `'boot'` | `boot` 启动首跳 / `polling` 周期轮询 |
+
+```ts
+await bot.user.beatToken('boot')
+
+// 之后定时
+await bot.user.beatToken('polling')
+```
+
+- 失败：上游 `error_code` 非 0 → `err(上游响应体)`。
+
+## 资料
+
+### info
+
+按 secUid 批量查用户信息，内部每 50 个一批请求，并去重、过滤空值。
+
+```ts
+bot.user.info(secUids: string[]): Promise<UserInfo[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `secUids` | `string[]` | — | 用户 sec uid 列表 |
+
+返回 `UserInfo`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `uid` | `string` | 数字 uid |
+| `secUid` | `string` | sec uid |
+| `nickname` | `string?` | 昵称 |
+| `avatar` | `string?` | 头像 |
+| `signature` | `string?` | 签名 |
+| `shortId` | `string?` | 短 id |
+| `uniqueId` | `string?` | 唯一 id |
+| `followStatus` | `number?` | 关注状态 |
+| `followerStatus` | `number?` | 粉丝状态 |
+| `isBlock` | `boolean?` | 是否拉黑 |
+| `imActiveness` | `number?` | IM 活跃度 |
+| `raw` | `Record<string, unknown>` | 未建模字段原样透传 |
+
+```ts
+const users = await bot.user.info([msg.senderSecUid!])
+console.log(users[0]?.nickname, users[0]?.followStatus)
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+### profileScene
+
+对话场景资料，字段比 `profileOther` 少。
+
+```ts
+bot.user.profileScene(secUid: string): Promise<ProfileDetail>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `secUid` | `string` | — | 用户 sec uid |
+
+返回 `ProfileDetail`：`uid`、`secUid`、`nickname?`、`signature?`、`avatar?`、`uniqueId?`、`followingCount?`、`followerCount?`、`followStatus?`、`followerStatus?`、`raw`。
+
+```ts
+const p = await bot.user.profileScene(secUid)
+```
+
+- 失败：不做业务状态校验；网络异常原样抛出。
+
+### profileOther
+
+完整资料，地域、年龄等未建模字段都在 `raw` 里。
+
+```ts
+bot.user.profileOther(secUid: string): Promise<ProfileDetail>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `secUid` | `string` | — | 用户 sec uid |
+
+```ts
+const p = await bot.user.profileOther(secUid)
+console.log(p.nickname, p.followerCount, p.raw)
+```
+
+- 失败：不做业务状态校验；网络异常原样抛出。
+
+### profileSelf
+
+自己的完整个人资料。
+
+```ts
+bot.user.profileSelf(): Promise<ProfileDetail>
+```
+
+```ts
+const p = await bot.user.profileSelf()
+console.log(p.uid, p.signature, p.followingCount)
+```
+
+- 失败：不做业务状态校验；网络异常原样抛出。
+
+## 在线
+
+### onlineStatus
+
+批量查询 sec 用户的在线状态。
+
+```ts
+bot.user.onlineStatus(secUserIds: string[], source?: string): Promise<OnlineItem[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `secUserIds` | `string[]` | — | 用户 sec uid 列表 |
+| `source` | `string` | `'heartbeat'` | 查询来源，原样透传 |
+
+返回 `OnlineItem`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `secUserId` | `string` | sec uid |
+| `lastActiveTime` | `number` | 最后活跃时间（秒时间戳）；`0` 表示从未在线 |
+
+```ts
+const items = await bot.user.onlineStatus([secUid])
+console.log(items[0]?.lastActiveTime)
+```
+
+- 失败：不做业务状态校验，无数据时返回空数组；网络异常原样抛出。
+
+### heartbeat
+
+IM 活跃心跳，登录后打一次即可。
+
+```ts
+bot.user.heartbeat(): Promise<void>
+```
+
+```ts
+await bot.user.heartbeat()
+```
+
+- 失败：`status_code` 非 0 → `err(上游响应体)`。
+
+### activeSwitch
+
+查询在线状态开关。
+
+```ts
+bot.user.activeSwitch(): Promise<number>
+```
+
+```ts
+const on = await bot.user.activeSwitch()
+// 1=开启（我可被对方看到在线），0=关闭
+```
+
+- 失败：不做业务状态校验，取不到时按 0 返回；网络异常原样抛出。
+
+## 错误
+
+| 来源 | `err.data` |
+|------|------------|
+| 上游业务失败 | 上游响应体原文（envelope 或 JSON） |
+| SDK 前置校验 | 失败的字段对象 |
+| 网络或解析失败 | 原生异常，不做包装 |
+
+`err.message` 恒为常量 `sdk`，不要解析字符串。完整模型见 [错误处理](/docs/guide/error)。

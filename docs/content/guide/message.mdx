@@ -1,0 +1,292 @@
+import { Note, Warn } from '@/components/mdx/callout'
+
+# 消息与事件
+
+`Bot` 启动后，入站消息通过长连接推送，出站消息走统一的 HTTP 通道。收与发共用同一套消息结构，用 `type` 判别类型。
+
+## chatId
+
+会话标识统一为 `chatId`，格式是 `type:shortId:conversationId` 的不透明串：
+
+| `type` | 会话 |
+|--------|------|
+| `1` | 私聊 |
+| `2` | 群聊 |
+| `50` | 盖楼（楼中楼） |
+
+`chatId` 来自事件或列表查询，发消息时原样回传。好友与群列表返回的条目都自带 `chatId`。
+
+```ts
+bot.on('message', msg => {
+  console.log(msg.chatId) // 直接用于 bot.msg.send
+})
+```
+
+<Warn>
+`chatId` 的内部格式不承诺稳定，不要自己拼接或解析。会话信息一律从事件和查询结果中取。
+</Warn>
+
+## 订阅事件
+
+事件统一用 `bot.on(event, fn)` 注册，`bot.off(event, fn)` 取消：
+
+```ts
+import type { BotMessage } from 'douyin.ts'
+
+const onMessage = (msg: BotMessage): void => {
+  console.log(msg.type, msg.text)
+}
+
+bot.on('message', onMessage)
+bot.off('message', onMessage)
+```
+
+| 事件 | 载荷 | 触发时机 |
+|------|------|----------|
+| `message` | `BotMessage` | 收到新消息 |
+| `message:edited` | `BotMessage` | 消息被编辑后重推 |
+| `notice` | `NoticeEvent` | 撤回、表情回应、群成员变更等通知 |
+| `request` | `RequestEvent` | 好友申请、入群申请 |
+| `voip` | `VoipCallEvent` | 语音/视频来电 |
+| `read` | `ReadEvent` | 单聊已读回执 |
+| `status` | `StatusEvent` | 会话状态变更，高频 |
+| `reconnecting` | `WsReconnectEvent` | 自动重连 |
+| `close` | `WsCloseEvent` | 连接关闭 |
+
+<Note>
+自身发出的消息默认不会触发 `message`。需要观察时打开 `selfMessage`，见 [配置](/docs/guide/config)。
+</Note>
+
+<Warn>
+事件回调没有 SDK 级兜底。回调里抛出的异常会变成未处理的 rejection，请在回调内部自行 `try/catch`。
+</Warn>
+
+## 消息结构
+
+入站消息把展示内容直接平铺在对象上，`type` 判别后读取对应字段：
+
+| 字段 | 说明 |
+|------|------|
+| `type` | 内容类型 |
+| `text` | 可读展示文本，媒体消息也可能是文案 |
+| `chatId` | 会话标识 |
+| `senderUid` / `senderSecUid` | 发送者 uid 与 secUid |
+| `senderNickname` | 发送者昵称，事件下发前会尽力补拉 |
+| `serverMessageId` | 服务端消息 id，撤回、回应、已读需要 |
+| `messageType` | 原始协议消息类型 |
+| `createTime` | 服务端时间戳 |
+| `indexInConversationV2` | 会话内位置 |
+| `raw` | 原始推送结构 |
+
+<Note>
+用 `msg.type` 与 `msg.text` 判别和展示。`msg.content` 是推送原文 JSON 串，不是消息体。
+</Note>
+
+```ts
+bot.on('message', async msg => {
+  if (msg.type !== 'text') return
+  if (msg.text === 'ping') {
+    await bot.msg.send(msg.chatId, { type: 'text', text: 'pong' })
+  }
+})
+```
+
+## 内容类型
+
+| type | 收 | 发 | 说明 |
+|------|----|----|------|
+| `text` | ✓ | ✓ | 文本，可带 `ats` / `atAll` |
+| `image` | ✓ | ✓ | 图片 |
+| `video` | ✓ | ✓ | 视频 |
+| `file` | ✓ | ✓ | 文件 |
+| `share` | ✓ | ✓ | 作品分享卡片 |
+| `userCard` | ✓ | ✓ | 用户名片 |
+| `forward` | ✓ | ✓ | 合并转发 |
+| `emoji` | ✓ | ✓ | 表情消息或小表情 |
+| `card` | ✓ | ✓ | 互动卡片，可原样回传 |
+| `groupCard` | ✓ | ✓ | 群邀请卡 |
+| `location` | ✓ | ✓ | 位置 |
+| `audio` | ✓ | ✗ | 语音 |
+| `link` | ✓ | ✗ | 链接卡片 |
+| `chains` | ✓ | ✗ | 接龙 |
+| `unknown` | ✓ | ✗ | 未识别类型，保留 `raw` |
+
+发送侧不支持的类型会抛 `SdkError`，`data` 中的 `type` 指明是哪一种。
+
+## 发送消息
+
+```ts
+bot.msg.send(chatId, body, opts?)
+```
+
+`body` 是按 `type` 判别的消息体；媒体字段既可以直接给 URL、本地路径、base64 或字节，也可以给预上传的资产。简写来源会先自动上传，再发送。
+
+```ts
+await bot.msg.send(chatId, { type: 'text', text: 'hi' })
+await bot.msg.send(chatId, { type: 'image', image: './cat.jpg' })
+await bot.msg.send(chatId, { type: 'video', video: { source: './clip.mp4' } })
+await bot.msg.send(chatId, { type: 'file', file: { source: './report.pdf', name: '报告.pdf' } })
+await bot.msg.send(chatId, { type: 'emoji', emoji: 'weixiao' })
+```
+
+| type | 载荷字段 |
+|------|----------|
+| `text` | `text`，可选 `ats`、`atAll` |
+| `image` | `image` |
+| `video` | `video`，可为来源简写或资产 |
+| `file` | `file`，可为来源简写或资产 |
+| `share` | `share` |
+| `userCard` | `user` |
+| `forward` | `nodes` |
+| `emoji` | `emoji` |
+| `card` | `card` |
+| `location` | `location` |
+| `groupCard` | `groupCard` |
+
+`opts` 支持 `clientMessageId`（幂等去重）、`reference`（引用元数据）与 `reply`（传入收到的消息对象自动生成引用）。
+
+### 返回值
+
+发送成功与否体现在返回值上，而不是异常：
+
+```ts
+const res = await bot.msg.send(chatId, { type: 'text', text: 'hi' })
+
+if (res.statusCode !== 0) {
+  console.warn('发送被拒', res.statusCode, res.statusMsg, res.checkCode)
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `statusCode` | `0` 表示已送达 |
+| `statusMsg` | 服务端拒绝原因 |
+| `serverMessageId` | 成功后的消息 id |
+| `clientMessageId` | 客户端消息 id |
+| `checkCode` | 内容审核状态码，非 0 表示被拦截或审核中 |
+
+`checkCode` 为 `10502` 时消息已提交、等待异步审核，对方可能延迟可见。
+
+<Warn>
+抛错只发生在请求没走通（HTTP 非 2xx、网络失败）或发送前校验失败（如不支持的类型）；服务端业务拒绝体现在 `statusCode`。两者都要处理。
+</Warn>
+
+### 幂等
+
+同一会话重复使用同一个 `clientMessageId` 会被服务端幂等去重，返回原消息：
+
+```ts
+await bot.msg.send(chatId, { type: 'text', text: 'hi' }, { clientMessageId: 'my-id-001' })
+```
+
+## 引用与提及
+
+引用回复支持任意消息类型，正文也可以是任意消息体：
+
+```ts
+await bot.msg.reply(chatId, msg, '收到')
+await bot.msg.reply(chatId, msg, { type: 'image', image: './ok.png' })
+```
+
+提及与 @所有人：
+
+```ts
+await bot.msg.send(chatId, { type: 'text', text: 'ping', ats: [{ uid: '123456' }] })
+await bot.msg.send(chatId, { type: 'text', text: '开会了', atAll: true })
+```
+
+`ats` 中缺少 `nickname` 时，SDK 会按 uid 查缓存或好友列表自动补齐；补不到仍会发送占位。
+
+`reply` 的正文为空会抛 `SdkError`，`data` 中的 `text` 为原始空串。
+
+## 消息操作
+
+```ts
+const sent = await bot.msg.send(chatId, { type: 'text', text: 'hi' })
+
+if (sent.serverMessageId) {
+  await bot.msg.recall(chatId, sent.serverMessageId)
+}
+
+if (msg.serverMessageId) {
+  await bot.msg.react(chatId, msg.serverMessageId, '[爱心]')
+  await bot.msg.react(chatId, msg.serverMessageId, '[爱心]', false)
+}
+
+await bot.msg.read(chatId, msg)
+await bot.msg.sendTyping(chatId, true)
+```
+
+| 方法 | 说明 |
+|------|------|
+| `recall(chatId, serverMessageId)` | 撤回，返回 `RecallResult`，看 `recalled` |
+| `react(chatId, serverMessageId, emoji, isSet?)` | 表情回应，`emoji` 可传键值或小表情 id |
+| `read(chatId, msg?)` | 标记已读；省略 `msg` 表示读到底 |
+| `sendTyping(chatId, typing)` | 输入状态，fire-and-forget，返回是否发出 |
+| `call(chatId, calleeUid)` | 语音通话未支持，固定返回 `statusCode: -1` |
+| `edit(chatId, clientMessageId, body)` | 复用原 cmid 重发，服务端幂等去重，无法真正编辑 |
+
+<Note>
+`react`、`read` 返回的 `statusCode` 与发送消息同义：`0` 表示服务端接受。
+</Note>
+
+## 通知事件
+
+`notice` 覆盖撤回、表情回应、好友关系、群成员与群信息变更等。常用类型：
+
+| type | 含义 |
+|------|------|
+| `message.recall` | 消息被撤回 |
+| `message.reaction` | 消息表情回应 |
+| `conversation.read` | 会话已读同步 |
+| `conversation.typing` | 对方正在输入 |
+| `conversation.update` | 会话更新 |
+| `conversation.delete` | 会话删除 |
+| `friend.increase` / `friend.decrease` | 好友关系建立/解除 |
+| `group.member-increase` / `group.member-decrease` | 群成员增减 |
+| `group.name-change` / `group.avatar-change` | 群名/群头像变更 |
+| `group.admin` / `group.dismiss` | 管理员设置/群解散 |
+| `im.command` | 未归类的命令消息 |
+
+```ts
+bot.on('notice', n => {
+  if (n.type === 'message.recall') {
+    console.log('撤回的消息', n.serverMessageId)
+  }
+  if (n.type === 'group.member-increase') {
+    console.log('新成员', n.members.map(m => m.uid))
+  }
+})
+```
+
+## 申请事件
+
+好友申请与入群申请单独走 `request`：
+
+| type | 关键字段 |
+|------|----------|
+| `friend.request` | `applicantUid`、`content` |
+| `group.join-request` | `conversationId`、`requestId`、`content` |
+
+```ts
+bot.on('request', async r => {
+  if (r.type === 'friend.request') {
+    await bot.frd.approve(r.applicantUid)
+  }
+  if (r.type === 'group.join-request' && r.requestId) {
+    await bot.grp.approve(r.requestId)
+  }
+})
+```
+
+## 查询
+
+消息之外的数据通过各自的域获取：
+
+```ts
+const history = await bot.chat.history(chatId, { count: 20 })
+const friends = await bot.frd.list()
+const groups = await bot.grp.list()
+```
+
+`frd.list()` 与 `grp.list()` 的条目自带 `chatId`，可直接用于发送。完整签名见对应的 API 页面。

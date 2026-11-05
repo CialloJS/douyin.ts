@@ -1,0 +1,298 @@
+import { Note, Warn } from '@/components/mdx/callout'
+
+# msg
+
+消息发送与交互，入口为 `bot.msg.*`。会话标识统一用 `chatId`（来自事件消息，或 `bot.frd.list()` / `bot.grp.list()` 的返回值），SDK 内部解析为会话地址。
+
+## 概览
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `send(chatId, body, opts?)` | `string`、`MsgBody`、可选 `SendBodyOptions & { reply?: BotMessage }` | `SendMessageResponse` |
+| `reply(chatId, msg, body, opts?)` | `string`、`BotMessage`、`string \| MsgBody`、可选 `{ atAll?, ats? }` | `SendMessageResponse` |
+| `edit(chatId, clientMessageId, body)` | `string`、`string`、`MsgBody` | `SendMessageResponse` |
+| `recall(chatId, serverMessageId)` | `string`、`string` | `RecallResult` |
+| `react(chatId, serverMessageId, emoji, isSet?)` | `string`、`string`、`string`、可选 `boolean` | `StatusResult` |
+| `read(chatId, msg?)` | `string`、可选 `BotMessage` | `StatusResult` |
+| `sendTyping(chatId, typing)` | `string`、`boolean` | `boolean` |
+| `call(chatId, calleeUid)` | `string`、`string` | `VoiceCallResult` |
+
+`StatusResult` 为 `{ statusCode: number; statusMsg: string }`（内部结构，未单独导出）。
+
+<Note>
+发送类方法被服务端拒绝时**不抛错**，结果体现在返回值的 `statusCode` / `checkCode` 上；只有前置校验失败与 HTTP 层异常才会抛出 `SdkError`。
+</Note>
+
+### send
+
+```ts
+send(
+  chatId: string,
+  body: MsgBody,
+  opts?: SendBodyOptions & { reply?: BotMessage },
+): Promise<SendMessageResponse>
+```
+
+按 `body.type` 发送一条消息。媒体字段可直接给 `MediaInput`（`Uint8Array` / `ArrayBuffer` / 路径 / URL / base64 串），由 SDK 先上传再发送；也可直接传 `bot.media.*` 的预上传资产。收侧消息对象与发侧同构，可原样回传。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识 |
+| `body` | `MsgBody` | 消息体，`type` 判别类型，载荷平铺 |
+| `opts.clientMessageId` | `string` | 客户端消息 id；同会话重复使用会被服务端幂等去重 |
+| `opts.reply` | `BotMessage` | 被引用消息；传入即本条为引用回复，任意消息类型均可引 |
+| `opts.reference` | `SendMessageReference` | 底层引用元数据；一般用 `opts.reply` 即可 |
+
+返回 `SendMessageResponse`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `statusCode` | `number` | 0 表示已投递；非 0 表示被拒 |
+| `statusMsg` | `string` | 失败说明（审核提示或上游错误描述） |
+| `serverMessageId` | `string?` | 服务端消息 id，撤回/表情回应/已读需要 |
+| `clientMessageId` | `string?` | 客户端消息 id（未指定时由 SDK 生成） |
+| `checkCode` | `number?` | 内容安全审核码；`10502` 表示已提交、审核中（对方可能延迟可见） |
+
+```ts
+await bot.msg.send(chatId, { type: 'text', text: 'hi' })
+
+// @ 提及：缺 nickname 时按 uid 查缓存/好友列表自动补齐
+await bot.msg.send(chatId, { type: 'text', text: '你好', ats: [{ uid }] })
+
+// @所有人：正文自动前置「@所有人 」，需群主/管理员权限
+await bot.msg.send(chatId, { type: 'text', text: '记得填表', atAll: true })
+
+// 媒体可直接给输入源，也可给预上传资产
+await bot.msg.send(chatId, { type: 'image', image: 'https://example.com/cat.jpg' })
+await bot.msg.send(chatId, { type: 'image', image: imgAsset })
+
+const res = await bot.msg.send(chatId, { type: 'text', text: '稍后撤回' })
+if (res.statusCode !== 0) return
+if (res.serverMessageId) await bot.msg.recall(chatId, res.serverMessageId)
+```
+
+失败时的 `err.data`：
+
+| 场景 | `data` |
+|------|--------|
+| Bot 未启动 | `{ started: false }` |
+| 媒体输入解析失败 | `{ input }`（原始输入） |
+| 图片为空 / 格式无法识别 | `{ bytes: 0 }` / `{ format }` |
+| 文件名为空 / 内容为空 / 超过 10 MiB | `{ name, bytes }` |
+| 该 `type` 没有发送策略 | `{ type }` |
+| 上游 HTTP 非 2xx | 原始响应体 |
+
+### reply
+
+```ts
+reply(
+  chatId: string,
+  msg: BotMessage,
+  body: string | MsgBody,
+  opts?: Pick<ReplyOptions, 'atAll' | 'ats'>,
+): Promise<SendMessageResponse>
+```
+
+引用回复：从被引用消息自动提取引用元数据，正文可以是文本，也可以是任意消息体（如引用后发图片）。文本为空不发送。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识 |
+| `msg` | `BotMessage` | 被引用消息，任意消息类型均可引 |
+| `body` | `string \| MsgBody` | 文本，或任意消息体 |
+| `opts.atAll` | `boolean` | 正文前置「@所有人 」；仅 `body` 为字符串时生效 |
+| `opts.ats` | `Array<{ uid: string; nickname?: string }>` | @ 提及；仅 `body` 为字符串时生效 |
+
+返回同 `send` 的 `SendMessageResponse`。
+
+```ts
+await bot.msg.reply(chatId, msg, '回复内容')
+await bot.msg.reply(chatId, msg, { type: 'image', image: 'https://example.com/cat.jpg' })
+await bot.msg.reply(chatId, msg, '记得填表', { atAll: true })
+```
+
+失败时的 `err.data`：文本正文为空时为 `{ text }`；其余同 `send`。
+
+### edit
+
+```ts
+edit(chatId: string, clientMessageId: string, body: MsgBody): Promise<SendMessageResponse>
+```
+
+```ts
+const sent = await bot.msg.send(chatId, { type: 'text', text: '旧文案' })
+await bot.msg.edit(chatId, sent.clientMessageId!, { type: 'text', text: '新文案' })
+```
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识 |
+| `clientMessageId` | `string` | 原消息的 cmid（`send` / `reply` 返回值） |
+| `body` | `MsgBody` | 编辑后的消息体 |
+
+返回 `SendMessageResponse`。
+
+<Warn>
+编辑实际不生效：HTTP 通道复用原 cmid 会被服务端幂等去重，只返回原消息 id，内容不更新。官方编辑走 App 专属通道，此方法仅作兜底。
+</Warn>
+
+失败时的 `err.data` 同 `send`。
+
+### recall
+
+```ts
+recall(chatId: string, serverMessageId: string): Promise<RecallResult>
+```
+
+撤回已投递的消息（只能撤回自己发送的）。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识 |
+| `serverMessageId` | `string` | 消息 id，取自 `send` 返回值或入站消息 |
+
+返回 `RecallResult`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `statusCode` | `number` | 0 表示成功 |
+| `statusMsg` | `string` | 失败说明 |
+| `recalled` | `boolean` | 信封与业务状态均为 0 才为 `true` |
+
+```ts
+const res = await bot.msg.recall(chatId, msg.serverMessageId!)
+if (!res.recalled) throw new Error(res.statusMsg)
+```
+
+失败时的 `err.data`：Bot 未启动为 `{ started: false }`；上游 HTTP 非 2xx 为原始响应体；业务拒绝不抛错，看 `recalled` 与 `statusCode`。
+
+### react
+
+```ts
+react(
+  chatId: string,
+  serverMessageId: string,
+  emoji: string,
+  isSet?: boolean,
+): Promise<{ statusCode: number; statusMsg: string }>
+```
+
+消息表情回应。`emoji` 可传抖音表态键值（如 `'[爱心]'`），也可传小表情 id（如 `'weixiao'`，SDK 自动解析为键值）。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识 |
+| `serverMessageId` | `string` | 消息 id |
+| `emoji` | `string` | 表态键值或小表情 id |
+| `isSet` | `boolean` | 缺省 `true` 添加，`false` 取消 |
+
+返回 `{ statusCode, statusMsg }`；服务端返回的幂等状态 `1` 会归一为 `0`。
+
+```ts
+await bot.msg.react(chatId, msg.serverMessageId!, '[爱心]')
+await bot.msg.react(chatId, msg.serverMessageId!, 'weixiao')
+await bot.msg.react(chatId, msg.serverMessageId!, '[爱心]', false)
+```
+
+失败时的 `err.data`：Bot 未启动为 `{ started: false }`；上游 HTTP 非 2xx 为原始响应体。
+
+### read
+
+```ts
+read(chatId: string, msg?: BotMessage): Promise<{ statusCode: number; statusMsg: string }>
+```
+
+标记会话已读。`msg` 缺省表示读到底；传入时用它的 `createTime`、`indexInConversationV2`、`serverMessageId` 作为已读游标。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识 |
+| `msg` | `BotMessage?` | 已读到的消息；缺省读到底 |
+
+返回 `{ statusCode, statusMsg }`。
+
+```ts
+await bot.msg.read(msg.chatId, msg)
+```
+
+失败时的 `err.data`：Bot 未启动为 `{ started: false }`；上游 HTTP 非 2xx 为原始响应体。
+
+### sendTyping
+
+```ts
+sendTyping(chatId: string, typing: boolean): Promise<boolean>
+```
+
+上报输入状态，对方显示「正在输入…」。走 WS 单帧发送，无回执。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识 |
+| `typing` | `boolean` | `true` 正在输入 / `false` 停止 |
+
+返回 `true` 仅表示帧已发出。失败时的 `err.data`：Bot 未启动为 `{ started: false }`；WS 握手或发送异常为原生错误。
+
+```ts
+await bot.msg.sendTyping(chatId, true)
+await bot.msg.sendTyping(chatId, false)
+```
+
+### call
+
+```ts
+call(chatId: string, calleeUid: string): Promise<VoiceCallResult>
+```
+
+发起语音通话，**当前未支持**：不发起任何网络请求，直接返回 `{ statusCode: -1, checkMessage: '服务端无 VOIP 通道' }`。来电仍可通过 `voip` 事件感知。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识 |
+| `calleeUid` | `string` | 被叫用户数字 uid |
+
+返回 `VoiceCallResult`（`channelId?` / `status?` / `checkCode?` / `checkMessage?` / `statusCode?`）。失败时的 `err.data`：Bot 未启动为 `{ started: false }`。
+
+## 消息体
+
+`MsgBody` 按 `type` 判别，载荷平铺，收/发同构。收侧消息（`InboundMessage`）可直接回传给 `send`。
+
+| `type` | 载荷 | 发送形态 |
+|--------|------|----------|
+| `text` | `text`、`ats?`、`atAll?` | messageType 7，`aweType` 700 |
+| `image` | `image`：`ImageResource \| MediaInput`（`bot.media.image` 的 `ImageAsset` 同形可直接给） | messageType 27（gif 为 2703） |
+| `video` | `video`：`VideoSend`（`{ asset, poster?, width?, height? }` 或 `{ source, poster?, width?, height? }`），或收侧 `VideoResource` 原样回传 | messageType 30 |
+| `file` | `file`：`FileAsset` 或 `{ source, name? }` | messageType 6 |
+| `share` | `share`：`ShareItem` | messageType 8 |
+| `userCard` | `user`：`UserCard` | messageType 25 |
+| `forward` | `nodes`：`ForwardNode[]` | messageType 136 |
+| `emoji` | `emoji`、`text?` | 小表情 id 发键值文本（7）；资源 id / 直链发 lite_emoji（5） |
+| `card` | `card`：`Card`（收侧原样回传） | messageType 110 |
+| `location` | `location`：`LocationCard` | messageType 502 |
+| `groupCard` | `groupCard`：`GroupCard` | messageType 58 |
+
+`audio` / `link` / `chains` / `unknown` 存在于类型联合中，但没有发送策略，发送会 `err({ type })`。
+
+```ts
+// 作品分享：itemId 与 uid 须对应真实作品，服务端会据此重建卡片
+await bot.msg.send(chatId, { type: 'share', share: { itemId, uid, title: '标题' } })
+
+// 合并转发：节点里的发送者信息可自行填写
+await bot.msg.send(chatId, {
+  type: 'forward',
+  nodes: [{ uid, nickname: '昵称', text: '内容', msgType: 7, aweType: 700, msgId }],
+})
+
+// 表情消息：直链必须来自 im-resource / im-emoticon 域
+await bot.msg.send(chatId, { type: 'emoji', emoji: '1687263281313-ts-e7bbade781abe88ab12e706e67' })
+```
+
+<Warn>
+`bot.media.emojiList()` 下发的是 `tos-cn` 表态域资源，发 lite_emoji 会被服务端标记为仅发送者可见；发送表情消息请用 `bot.sticker.trending()` 的直链。
+</Warn>
+
+## 错误
+
+- 上游失败 → `err(上游响应体)`：HTTP 非 2xx 时为原始响应字节，业务失败时为上游 JSON。
+- SDK 前置校验 → `err({ 字段 })`：如 `{ started: false }`、`{ input }`、`{ bytes }`、`{ format }`、`{ name }`、`{ type }`、`{ text }`。
+- 发送、撤回、表情回应、已读的业务拒绝不抛错，按返回值判断。
+- 统一用 `isErr(e)` 判别，`e.data` 即上述形态。

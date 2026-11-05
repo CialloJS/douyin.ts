@@ -1,0 +1,350 @@
+# grp
+
+import { Note, Tip, Warn } from '@/components/mdx/callout'
+
+## 概览
+
+群域：群列表、成员、入群申请与群管理。群方法的 `chatId` 都来自 `bot.grp.list()` 或事件消息。
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `list` | `{ cursor?, count? }` | `Array<GroupInfo & { chatId: string }>` |
+| `members` | `chatId: string` | `GroupMemberInfo[]` |
+| `requests` | `chatId?: string` | `GroupJoinRequestInfo[]` |
+| `approve` | `requestId: string` | `ActionResult & { request?: GroupJoinRequestInfo }` |
+| `reject` | `requestId: string` | `ActionResult & { request?: GroupJoinRequestInfo }` |
+| `rename` | `chatId: string, name: string` | `ActionResult` |
+| `addMembers` | `chatId: string, uids: string[]` | `ActionResult & { success?: string[]; failed?: string[] }` |
+| `removeMembers` | `chatId: string, uids: string[]` | `ActionResult` |
+| `leave` | `chatId: string` | `ActionResult` |
+| `create` | `{ participantUids, name?, description? }` | `ActionResult & { group?: GroupInfo; chatId?: string }` |
+| `verifyShare` | `{ share, conversationId?, scene? }` | `GroupShareResult` |
+
+<Note>
+`chatId` 统一为字符串，内部负责解析，不对外暴露会话地址结构；也可用 `chatIdOf` 构造。
+</Note>
+
+## 列表
+
+### list
+
+群列表。走原生通道拉全量群会话，按 `isGroup` 过滤。
+
+```ts
+bot.grp.list(options?: { cursor?: number; count?: number }): Promise<Array<GroupInfo & { chatId: string }>>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `options.cursor` | `number` | `0` | 起始游标 |
+| `options.count` | `number` | `20` | 单页条数；缺省自动翻页拉全量 |
+
+返回项在 `GroupInfo` 基础上补 `chatId`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `chatId` | `string` | 会话标识，可直接用于其他群方法 |
+| `conversationId` | `string` | 会话 id |
+| `conversationShortId` | `string` | 会话短 id |
+| `conversationType` | `number` | 会话类型，群为 `2` |
+| `isGroup` | `boolean` | 是否群聊 |
+| `name` | `string` | 群名 |
+| `avatar` | `string?` | 群头像 |
+| `ownerUid` | `string?` | 群主 uid |
+| `lastMessageTime` | `number` | 最后消息时间 |
+| `members` | `ConversationMember[]` | 首页成员（`uid` / `secUid?` / `role`） |
+| `groupNumber` | `string?` | 群号 |
+| `ticket` | `string?` | 会话凭证，通常只随 `chat.info()` 下发 |
+
+```ts
+const groups = await bot.grp.list()
+
+for (const g of groups) {
+  console.log(g.name, g.groupNumber, g.chatId)
+}
+```
+
+- 失败：envelope `statusCode` 非 0 → `err(上游响应体)`。
+
+## 成员
+
+### members
+
+群成员列表，内部按 cursor 自动翻页。
+
+```ts
+bot.grp.members(chatId: string): Promise<GroupMemberInfo[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 群会话标识 |
+
+返回 `GroupMemberInfo`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `uid` | `string` | 成员数字 uid |
+| `secUid` | `string?` | sec uid |
+| `role` | `number` | `0` 普通成员 / `1` 群主 / `2` 管理员 |
+| `alias` | `string?` | 群昵称 |
+| `sortOrder` | `string?` | 排序值 |
+| `blocked` | `number?` | 屏蔽标记 |
+| `leftBlockTime` | `string?` | 退群/屏蔽时间 |
+| `ext` | `Record<string, string>?` | 原始扩展字段 |
+
+<Note>
+该接口只回传 uid、角色与群昵称等成员字段，`nickname` / `avatar` 通常缺省；需要资料时配合 `bot.user.info()` 按 `secUid` 查。
+</Note>
+
+```ts
+const members = await bot.grp.members(chatId)
+const admins = members.filter(m => m.role === 2)
+```
+
+- 失败：动作响应 `statusCode` 非 0 → `err(上游响应体)`。
+
+### addMembers
+
+拉人入群，成功与失败名单在返回里回读。
+
+```ts
+bot.grp.addMembers(chatId: string, uids: string[]): Promise<ActionResult & { success?: string[]; failed?: string[] }>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 群会话标识 |
+| `uids` | `string[]` | — | 待拉入成员数字 uid |
+
+```ts
+const res = await bot.grp.addMembers(chatId, ['10000', '10001'])
+console.log(res.statusCode, res.success, res.failed)
+```
+
+- 失败：业务失败不抛错，看 `statusCode` / `statusMsg`；`success` / `failed` 仅在非空时出现。
+
+### removeMembers
+
+移出群成员。
+
+```ts
+bot.grp.removeMembers(chatId: string, uids: string[]): Promise<ActionResult>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 群会话标识 |
+| `uids` | `string[]` | — | 待移出成员数字 uid |
+
+```ts
+await bot.grp.removeMembers(chatId, ['10000'])
+```
+
+- 失败：业务失败不抛错，看 `statusCode` / `statusMsg`。
+
+## 申请
+
+### requests
+
+入群申请列表。省略 `chatId` 查全部群；传入 `chatId` 时只保留该群的申请（服务端仍会拉全量审核列表后在本地过滤）。
+
+```ts
+bot.grp.requests(chatId?: string): Promise<GroupJoinRequestInfo[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string?` | — | 群会话标识，省略查全部群 |
+
+返回 `GroupJoinRequestInfo`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `requestId` | `string` | 申请 id（同意/拒绝时传入） |
+| `applicantUid` | `string` | 申请人数字 uid |
+| `applicantSecUid` | `string?` | 申请人 sec uid |
+| `groupShortId` | `string` | 群短 id |
+| `conversationType` | `number` | 会话类型 |
+| `status` | `number` | `1` 待处理 / `2` 已通过 / `3` 已拒绝 / `4` 失效 |
+| `reason` | `string?` | 申请理由 |
+| `inviterUid` | `string?` | 邀请人 uid |
+| `createdAt` | `string?` | 申请时间 |
+| `ext` | `Record<string, string>?` | 原始扩展字段 |
+
+```ts
+const list = await bot.grp.requests(chatId)
+const pending = list.filter(r => r.status === 1)
+```
+
+<Tip>
+返回列表包含各状态的申请，不只有待处理项；处理前先按 `status` 过滤。
+</Tip>
+
+- 失败：`chatId` 不合法 → `err({ chatId })`；审核列表业务状态非 0 → `err(上游响应体)`。
+
+### approve
+
+同意入群申请。
+
+```ts
+bot.grp.approve(requestId: string): Promise<ActionResult & { request?: GroupJoinRequestInfo }>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `requestId` | `string` | — | 申请 id，取 `requests()` 返回项的 `requestId` |
+
+```ts
+const res = await bot.grp.approve(pending[0].requestId)
+console.log(res.statusCode, res.request?.applicantUid)
+```
+
+- 失败：业务失败不抛错，看 `statusCode` / `statusMsg`；上游回读的申请详情在 `request`。
+
+### reject
+
+拒绝入群申请。
+
+```ts
+bot.grp.reject(requestId: string): Promise<ActionResult & { request?: GroupJoinRequestInfo }>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `requestId` | `string` | — | 申请 id |
+
+```ts
+await bot.grp.reject(pending[0].requestId)
+```
+
+- 失败：业务失败不抛错，看 `statusCode` / `statusMsg`。
+
+## 管理
+
+### rename
+
+修改群名。
+
+```ts
+bot.grp.rename(chatId: string, name: string): Promise<ActionResult>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 群会话标识 |
+| `name` | `string` | — | 新群名 |
+
+```ts
+await bot.grp.rename(chatId, '新群名')
+```
+
+- 失败：业务失败不抛错，看 `statusCode` / `statusMsg`。
+
+### leave
+
+退出群聊。
+
+```ts
+bot.grp.leave(chatId: string): Promise<ActionResult>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 群会话标识 |
+
+```ts
+await bot.grp.leave(chatId)
+```
+
+- 失败：响应为空 body，`statusCode` 为 0 即成功；业务失败不抛错。
+
+### create
+
+创建群聊，返回创建出的会话。`participantUids` 须包含创建者本人。
+
+```ts
+bot.grp.create(options: {
+  participantUids: string[]
+  name?: string
+  description?: string
+}): Promise<ActionResult & { group?: GroupInfo; chatId?: string }>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `options.participantUids` | `string[]` | — | 参与成员数字 uid，含创建者本人 |
+| `options.name` | `string?` | `''` | 群名 |
+| `options.description` | `string?` | `''` | 群简介 |
+
+```ts
+const res = await bot.grp.create({
+  participantUids: [bot.id, '10001'],
+  name: '新群',
+  description: '群简介',
+})
+
+if (res.chatId) await bot.msg.send(res.chatId, { text: '群已建好' })
+```
+
+- 失败：业务失败不抛错，看 `statusCode` / `statusMsg`；上游未回传会话时 `group` / `chatId` 缺省。
+
+### verifyShare
+
+用群邀请链接换群邀请凭证 `ticket` 与群资料，不需要先有 `chatId`。链接会自动解析 `secret` 与 `group_id`；纯 `secret` 需补 `conversationId`。
+
+```ts
+bot.grp.verifyShare(input: {
+  share: string
+  conversationId?: string
+  scene?: number
+}): Promise<GroupShareResult>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `input.share` | `string` | — | 邀请链接，或链接中的 `secret`（`AAED` 前缀） |
+| `input.conversationId` | `string?` | — | 群 `conversationId`；链接自带 `group_id` 时可省略 |
+| `input.scene` | `number` | `0` | 邀请卡场景 `invite_card_scene` |
+
+返回 `GroupShareResult`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ticket` | `string` | 群邀请凭证，可填入 `groupCard.ticket` 发邀请卡 |
+| `conversationId` | `string` | 群会话 id |
+| `conversationShortId` | `string` | 群会话短 id |
+| `name` | `string` | 群名 |
+| `desc` | `string` | 群简介 |
+| `avatar` | `string?` | 群头像 |
+| `memberCount` | `number` | 群成员数 |
+| `ownerUid` | `string?` | 群主 uid |
+| `ownerSecUid` | `string?` | 群主 sec uid |
+| `ownerNickname` | `string?` | 群主昵称 |
+| `inviterUid` | `string?` | 邀请人 uid |
+| `inviterSecUid` | `string?` | 邀请人 sec uid |
+| `auditQuestion` | `string?` | 入群审核问题 |
+
+```ts
+const r = await bot.grp.verifyShare({ share: 'https://v.douyin.com/xxx/' })
+console.log(r.ticket, r.name, r.memberCount)
+
+// 纯 secret 需要指定群
+const one = await bot.grp.verifyShare({ share: 'AAED...', conversationId: '7683354495350293038' })
+```
+
+<Warn>
+这里返回的 `ticket` 即传入的 `secret`，与 `chat.info()` 从会话详情拿到的 `ticket` 是两条不同的串，二者不要混用。
+</Warn>
+
+- 失败：解析不到 `secret` 或群 id → `err({ secret, groupId })`；HTTP 非 2xx → `err(上游响应文本)`；响应缺少 `ticket` → `err(上游 JSON)`。
+
+## 错误
+
+| 来源 | `err.data` |
+|------|------------|
+| 上游业务失败 | 上游响应体原文（envelope 或 JSON） |
+| SDK 前置校验 | 失败的字段对象，如 `err({ chatId })` |
+| 网络或解析失败 | 原生异常，不做包装 |
+
+`err.message` 恒为常量 `sdk`，不要解析字符串。返回 `ActionResult` 的动作在业务失败时不抛错，以 `statusCode` / `statusMsg` 判定。完整模型见 [错误处理](/docs/guide/error)。

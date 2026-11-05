@@ -1,0 +1,335 @@
+# chat
+
+import { Note, Tip, Warn } from '@/components/mdx/callout'
+
+## 概览
+
+会话域：历史消息、会话信息、已读游标与会话设置。`chatId` 来自事件消息的 `msg.chatId`，或 `frd.list()` / `grp.list()` 的返回项。
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `history` | `chatId, { cursor?, count? }` | `ChatMessage[]` |
+| `userMessageStat` | `UserMessageQuery` | `Record<string, unknown>` |
+| `ack` | `chatId, serverMessageId` | `ActionResult` |
+| `readSwitch` | `chatId, BotMessage[]` | `void` |
+| `strangers` | — | `StrangerInfo[]` |
+| `list` | `{ cursor?, count? }` | `GroupInfo[]` |
+| `info` | `chatId` | `GroupInfo[]` |
+| `strangerConversations` | — | `ActionResult` |
+| `readIndex` | `chatId` | `ReadIndexRow[]` |
+| `minIndex` | `chatId` | `MinIndexRow[]` |
+| `batchReadIndex` | `chatId` | `ActionResult` |
+| `delete` | `chatId` | `ActionResult` |
+| `setting` | `chatId, { setStickOnTop?, setMute?, setFavorite? }` | `ActionResult & { setting?: Record<string, unknown> }` |
+
+<Note>
+`chatId` 统一为字符串，内部负责解析会话地址；也可用 `chatIdOf` 由 `conversationId` / `conversationShortId` / `conversationType` 构造。
+</Note>
+
+## 消息
+
+### history
+
+拉取会话历史消息，按锚点分页。
+
+```ts
+bot.chat.history(chatId: string, opts?: { cursor?: number; count?: number }): Promise<ChatMessage[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 会话标识 |
+| `opts.cursor` | `number` | `0` | 翻页锚点（消息 index） |
+| `opts.count` | `number` | `20` | 单页条数 |
+
+返回 `ChatMessage`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `msgId` | `string` | 服务端消息 id |
+| `threadId` | `string` | 会话 id |
+| `senderUid` | `string` | 发送者数字 uid |
+| `senderSecUid` | `string?` | 发送者 sec uid |
+| `content` | `string` | 消息正文原文 |
+| `msgType` | `number` | 消息类型 |
+| `createTime` | `number` | 创建时间 |
+| `status` | `number` | 消息状态 |
+| `indexInConversation` | `string?` | 会话内索引 |
+| `indexInConversationV2` | `string?` | 会话内索引 v2 |
+
+```ts
+const history = await bot.chat.history(msg.chatId, { count: 20 })
+
+for (const m of history) {
+  console.log(m.senderUid, m.msgType, m.content)
+}
+```
+
+- 失败：envelope `statusCode` 非 0 → `err(上游响应体)`。
+
+### userMessageStat
+
+按 uid 消息区间查询。语义不完整，直接返回上游原始结构。
+
+```ts
+bot.chat.userMessageStat(req?: UserMessageQuery): Promise<Record<string, unknown>>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `req.startIndex` | `string` | `'0'` | uid 起始（int64 字符串） |
+| `req.messageType` | `string` | `'0'` | 消息类型过滤 |
+| `req.endIndex` | `string` | `'0'` | uid 结束 |
+| `req.cursor` | `string` | `''` | 游标 |
+| `req.inboxType` | `number` | `0` | 收件箱类型 |
+
+```ts
+const stat = await bot.chat.userMessageStat({ startIndex: '10000', messageType: '0' })
+```
+
+<Warn>
+该接口返回字段不保证有业务含义，SDK 只做原样透传，调用方需自行判断。
+</Warn>
+
+- 失败：不做业务状态校验，上游异常时可能返回空对象；网络异常原样抛出。
+
+### ack
+
+客户端消息回执确认。
+
+```ts
+bot.chat.ack(chatId: string, serverMessageId: string): Promise<ActionResult>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 会话标识 |
+| `serverMessageId` | `string` | — | 服务端消息 id（int64 字符串） |
+
+```ts
+await bot.chat.ack(msg.chatId, msg.serverMessageId)
+```
+
+- 失败：业务失败不抛错，看 `statusCode` / `statusMsg`。
+
+### readSwitch
+
+把一批入站消息标记为已读，是会话侧收到已读回执的依据。
+
+```ts
+bot.chat.readSwitch(chatId: string, msgs: BotMessage[]): Promise<void>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 会话标识 |
+| `msgs` | `BotMessage[]` | — | 收到的消息数组；仅取带 `serverMessageId` 的项 |
+
+```ts
+bot.on('message', async msg => {
+  await bot.chat.readSwitch(msg.chatId, [msg])
+})
+```
+
+<Tip>
+没有 `serverMessageId` 的消息会被静默跳过，可一次传入多条批量标记。
+</Tip>
+
+- 失败：`chatId` 不合法 → `err({ chatId })`；上游任一条回执 `err_code` 非 0 → `err(上游响应体)`。
+
+## 会话
+
+### strangers
+
+陌生人会话列表。
+
+```ts
+bot.chat.strangers(): Promise<StrangerInfo[]>
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `uid` | `string` | 对端数字 uid |
+| `nickname` | `string?` | 昵称 |
+| `conversationId` | `string` | 会话 id |
+| `conversationShortId` | `string` | 会话短 id |
+| `lastMessage` | `ChatMessage?` | 最后一条消息 |
+| `lastMessageTime` | `number` | 最后消息时间 |
+| `unreadCount` | `number` | 未读数 |
+
+```ts
+const strangers = await bot.chat.strangers()
+```
+
+- 失败：业务状态非 0 → `err(上游响应体)`。
+
+### list
+
+旧 Cookie 通道的群会话列表，保留备用；主场景请用 `bot.grp.list()`。
+
+```ts
+bot.chat.list(options?: { cursor?: number; count?: number }): Promise<GroupInfo[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `options.cursor` | `number` | `0` | 起始游标 |
+| `options.count` | `number` | `20` | 单页条数；缺省自动翻页 |
+
+返回 `GroupInfo[]`，字段与 `grp.list()` 相同，但**不含 `chatId`**，且只保留 `isGroup` 的会话。
+
+```ts
+const groups = await bot.chat.list()
+```
+
+- 失败：envelope `statusCode` 非 0 → `err(上游响应体)`。
+
+### info
+
+按 `chatId` 查会话详情（ticket / 成员 / 未读），群邀请卡需要的 `ticket` 通常从这里取。
+
+```ts
+bot.chat.info(chatId: string): Promise<GroupInfo[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 会话标识 |
+
+```ts
+const [conv] = await bot.chat.info(chatId)
+console.log(conv?.ticket, conv?.name)
+```
+
+- 失败：`chatId` 不合法 → `err({ chatId })`；业务状态不抛错，查不到时返回空数组。
+
+### strangerConversations
+
+陌生人会话（服务端侧接口）。
+
+```ts
+bot.chat.strangerConversations(): Promise<ActionResult>
+```
+
+```ts
+const res = await bot.chat.strangerConversations()
+console.log(res.statusCode, res.statusMsg)
+```
+
+- 失败：服务端常限流返回 409，业务失败不抛错，原因在 `statusMsg`。
+
+### delete
+
+删除会话。
+
+```ts
+bot.chat.delete(chatId: string): Promise<ActionResult>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 会话标识 |
+
+```ts
+await bot.chat.delete(chatId)
+```
+
+- 失败：响应为空 body，`statusCode` 为 0 即成功；业务失败不抛错。
+
+## 已读
+
+### readIndex
+
+会话各成员的已读游标。
+
+```ts
+bot.chat.readIndex(chatId: string): Promise<ReadIndexRow[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 会话标识 |
+
+返回 `ReadIndexRow`：`uid`、`readIndex`（微秒时间戳量级）、`extra?`。
+
+```ts
+const rows = await bot.chat.readIndex(chatId)
+```
+
+- 失败：`chatId` 不合法 → `err({ chatId })`；业务状态不校验，无数据时返回空数组。
+
+### minIndex
+
+会话各成员的最小同步游标，增量拉取的起点。
+
+```ts
+bot.chat.minIndex(chatId: string): Promise<MinIndexRow[]>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 会话标识 |
+
+返回 `MinIndexRow`：`uid`、`minIndex`。
+
+```ts
+const rows = await bot.chat.minIndex(chatId)
+```
+
+- 失败：`chatId` 不合法 → `err({ chatId })`；业务状态不校验，无数据时返回空数组。
+
+### batchReadIndex
+
+批量查所有成员的已读游标。
+
+```ts
+bot.chat.batchReadIndex(chatId: string): Promise<ActionResult>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 会话标识 |
+
+```ts
+await bot.chat.batchReadIndex(chatId)
+```
+
+- 失败：业务失败不抛错，看 `statusCode` / `statusMsg`。
+
+## 设置
+
+### setting
+
+会话设置：置顶、免打扰、收藏。未传的字段不改动，响应会回读完整设置。
+
+```ts
+bot.chat.setting(chatId: string, input: {
+  setStickOnTop?: boolean
+  setMute?: boolean
+  setFavorite?: boolean
+}): Promise<ActionResult & { setting?: Record<string, unknown> }>
+```
+
+| 参数 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `chatId` | `string` | — | 会话标识 |
+| `input.setStickOnTop` | `boolean?` | — | 置顶：`true` 开 / `false` 关 |
+| `input.setMute` | `boolean?` | — | 免打扰 |
+| `input.setFavorite` | `boolean?` | — | 收藏会话 |
+
+```ts
+const res = await bot.chat.setting(chatId, { setStickOnTop: true })
+console.log(res.setting)
+```
+
+- 失败：业务失败不抛错，看 `statusCode` / `statusMsg`；`setting` 原样透传上游设置对象。
+
+## 错误
+
+| 来源 | `err.data` |
+|------|------------|
+| 上游业务失败 | 上游响应体原文（envelope 或 JSON） |
+| SDK 前置校验 | 失败的字段对象，如 `err({ chatId })` |
+| 网络或解析失败 | 原生异常，不做包装 |
+
+`err.message` 恒为常量 `sdk`，不要解析字符串。返回 `ActionResult` 的动作在业务失败时不抛错，以 `statusCode` / `statusMsg` 判定。完整模型见 [错误处理](/docs/guide/error)。

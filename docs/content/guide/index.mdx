@@ -1,0 +1,75 @@
+import { Note } from '@/components/mdx/callout'
+
+# 快速开始
+
+douyin.ts 是一个抖音私信机器人 SDK：登录拿会话，用会话构造 `Bot`，注册事件后启动。
+
+要求 Node.js 20+，纯 ESM。
+
+## 安装
+
+```bash
+pnpm add douyin.ts
+```
+
+也可以使用 `npm install douyin.ts` 或 `yarn add douyin.ts`。
+
+## 最小示例
+
+```ts
+import { login, Bot } from 'douyin.ts'
+
+// 1. 扫码登录，二维码串交给调用方渲染
+const session = await login({
+  onQr: qr => renderQr(qr.url),
+})
+
+// 2. 用会话构造 Bot
+const bot = new Bot(session)
+
+bot.on('message', async msg => {
+  if (msg.type === 'text' && msg.text === 'hi') {
+    await bot.msg.send(msg.chatId, { text: 'hello' })
+  }
+})
+
+await bot.start()
+```
+
+<Note>
+`login` 只负责协议与会话，不做二维码渲染、不做落盘。`session.cookie` 是唯一凭据。
+</Note>
+
+## 三步模型
+
+| 步骤 | 做什么 | 参考 |
+|------|--------|------|
+| 登录 | `login()` 扫码或复用 Cookie，拿到 `session` | [登录](/docs/guide/login) |
+| 构建 | `new Bot(session)`，用 `bot.on(...)` 注册事件 | [配置](/docs/guide/config) |
+| 启动 | `await bot.start()` 建立长连并开始收发 | [消息与事件](/docs/guide/message) |
+
+## API 形态
+
+统一 `bot.域.动作` 两级结构，不出现第三层：
+
+| 域 | 动作 |
+|----|------|
+| msg | send / reply / edit / recall / react / read / sendTyping / call |
+| media | image / video / file / videoUrl / awemeDetail / getPeer / emojiList |
+| sticker | list / favs / gifs / collect / trending / strategy / privacyImage |
+| frd | list / requests / approve / reject |
+| grp | list / members / addMembers / removeMembers / requests / approve / reject / rename / leave / create / verifyShare |
+| chat | history / userMessageStat / ack / readSwitch / strangers / list / info / strangerConversations / delete / readIndex / minIndex / batchReadIndex / setting |
+| user | self / account / beatToken / info / profileScene / profileOther / profileSelf / onlineStatus / heartbeat / activeSwitch |
+| social | spotlight / familiar / follow / bubble |
+| watch | danmaku / progress / series / mix / history / safety |
+| notice | count / list |
+| setting | desktop / account / compliance |
+
+完整签名见对应的 API 页面。
+
+## 下一步
+
+- [登录](/docs/guide/login)：二维码、滑块、短信与密码验证
+- [消息与事件](/docs/guide/message)：内容类型判别与发送
+- [错误处理](/docs/guide/error)：`SdkError` 的四种来源

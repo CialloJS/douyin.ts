@@ -1,0 +1,208 @@
+import { Note, Tip, Warn } from '@/components/mdx/callout'
+
+# 错误处理
+
+SDK 只把失败原样交回，不做错误码翻译、不拼描述、不重命名字段。SDK 判定为失败并主动抛出的错误都是 `SdkError`，细节全在 `data` 里；网络与运行时错误保持原生形态。
+
+## 错误模型
+
+```ts
+import { SdkError, isErr } from 'douyin.ts'
+
+try {
+  await bot.msg.reply(chatId, msg, '收到')
+} catch (e) {
+  if (isErr(e)) {
+    e.name    // 'SdkError'
+    e.message // 恒为 'sdk'
+    e.data    // 原始失败数据
+  }
+}
+```
+
+| 成员 | 说明 |
+|------|------|
+| `name` | 恒为 `SdkError` |
+| `message` | 恒为 `sdk`，不携带任何动态内容 |
+| `data` | 唯一的失败细节来源，类型由抛错点决定 |
+| `cause` | 可选，`err` 传入 `ErrorOptions` 时保留 |
+
+`err` 是 SDK 内部的抛错函数，不对外导出；调用方只需要 `SdkError` 与 `isErr`。
+
+<Warn>
+不要解析或展示 `e.message`。动态内容只可能在 `data` 里，`message` 保持常量正是为了避免调用方依赖字符串。
+</Warn>
+
+## 四种来源
+
+错误没有分类字段，但 `data` 的形状能反推出它来自哪一步。
+
+### 上游接口返回错误
+
+请求成功发出，上游明确返回失败状态。SDK 把整个响应体原样塞进 `data`：
+
+```ts
+// 私有协议响应
+if (Number(decoded['statusCode'] ?? 0) !== 0) return err(decoded)
+
+// HTTP 响应
+if (!res.ok) return err(res.data)
+
+// Passport 业务码
+if (d.error_code !== 0) err(res.data)
+```
+
+业务码失败时 `data` 是完整响应体，通常带 `statusCode` / `status_code` / `error_code` / `errorDesc` / `status_msg` 等原始字段，字段名完全取决于该接口。HTTP 层非 2xx 时，`data` 则可能是响应原文或原始字节。
+
+### 上游成功但业务失败
+
+上游返回成功，但关键数据缺失或状态不符合预期。SDK 把这次已校验的上游数据交回：
+
+```ts
+const validated = await validateCode(http, challenge, used, code)
+if (!validated.data.ticket) err(validated)
+```
+
+```ts
+const info = await self(http)
+if (!info.uid) return err(info)
+```
+
+例如二维码过期、验证码校验没有返回 ticket、自身资料查不到 uid，都属于这一类。
+
+### SDK 前置校验
+
+参数或运行状态不满足要求，SDK 在发请求之前就拒绝。`data` 是只带失败字段的小对象：
+
+```ts
+if (!type || !shortId || !conversationId) return err({ chatId })
+if (!this.core) return err({ started: false })
+if (!content.text.trim()) return err({ text: content.text })
+return err({ type: body.type })
+```
+
+常见字段包括 `chatId`、`text`、`type`、`started`、`onMfa`、`verify_ways`、`image`、`video`、`file` 等，只反映这次校验失败的那一项。
+
+### 网络层失败
+
+请求根本没到上游。`fetch` 抛出的原生错误会直接穿出 SDK，不会被包装：
+
+```ts
+await fetch(url, { signal: AbortSignal.timeout(30_000) })
+```
+
+| 表现 | 含义 |
+|------|------|
+| `TypeError`，消息常为 `fetch failed` | DNS、连接、TLS 等网络失败 |
+| `DOMException`，`name` 为 `TimeoutError` | 超过 `AbortSignal.timeout` 设定的时长 |
+
+<Note>
+网络错误不是 `SdkError`，`isErr` 会返回 `false`。把这类错误和 SDK 错误放在一起分类，会漏掉重试与代理配置问题。
+</Note>
+
+## 判别错误
+
+先判断是否为 `SdkError`，再看 `data` 的形状：
+
+```ts
+import { isErr } from 'douyin.ts'
+
+function kindOf (e: unknown): 'network' | 'timeout' | 'upstream' | 'precheck' | 'business' {
+  if (!isErr(e)) {
+    if (e instanceof TypeError) return 'network'
+    if (e instanceof DOMException && e.name === 'TimeoutError') return 'timeout'
+    throw e
+  }
+
+  const data = e.data
+  if (data === null || typeof data !== 'object' || ArrayBuffer.isView(data)) return 'upstream'
+
+  const d = data as Record<string, unknown>
+  if ('status_code' in d || 'statusCode' in d || 'error_code' in d) return 'upstream'
+  if ('data' in d && 'message' in d) return 'business'
+  return 'precheck'
+}
+```
+
+| 判别 | 对应来源 |
+|------|----------|
+| `isErr` 为 `false` 且是 `TypeError` | 网络层失败 |
+| `isErr` 为 `false` 且是 `TimeoutError` | 超时 |
+| `data` 带 `status_code` / `statusCode` / `error_code` | 上游接口错误 |
+| `data` 是字符串或原始字节 | HTTP 非 2xx，上游错误原文 |
+| `data` 是完整响应 envelope | 上游成功但业务失败 |
+| `data` 只含少量失败字段 | SDK 前置校验 |
+
+<Tip>
+形状判别是启发式的：业务失败的 `data` 也可能是任意响应对象。最可靠的依据仍然是出错的那个调用点——知道自己在调登录、发送还是会话操作，就能确定 `data` 属于哪一类。
+</Tip>
+
+## 处理示例
+
+登录失败通常是超时或频控，可以按字段分流：
+
+```ts
+import { login, isErr } from 'douyin.ts'
+
+try {
+  const session = await login({ onQr: qr => renderQr(qr.url) })
+} catch (e) {
+  if (!isErr(e)) throw e
+
+  const d = e.data as { timeout?: number; status?: string; fatal?: boolean }
+  if (d.fatal) {
+    // 访问过于频繁，重试只会更糟
+    return
+  }
+  if (d.timeout) {
+    // 用户未扫码或未完成验证，重新发起
+    return
+  }
+  throw e
+}
+```
+
+发送消息时先看返回值，再看异常：
+
+```ts
+const res = await bot.msg.send(chatId, { type: 'text', text: 'hi' })
+if (res.statusCode !== 0) {
+  // 上游已收到请求，但业务拒绝
+  console.warn(res.statusCode, res.statusMsg)
+}
+```
+
+## 不要这样做
+
+| 做法 | 问题 |
+|------|------|
+| 匹配 `e.message` | 恒为 `sdk`，永远匹配不到原因 |
+| 维护错误码枚举 | SDK 不定义错误码，上游码可能变化 |
+| 假设字段被重命名 | `data` 是上游原文或失败字段，没有统一命名 |
+| 把网络错误当 `SdkError` | `isErr` 为 `false`，会直接漏进未处理分支 |
+| 前置校验失败后重试 | 参数或状态没变，重试必然再次失败 |
+
+## 先看返回值
+
+不是所有失败都会抛异常。多数发送与操作类接口把业务失败放进返回值：
+
+| 接口 | 失败表达 |
+|------|----------|
+| `bot.msg.send` / `bot.msg.edit` | 返回 `SendMessageResponse`，看 `statusCode`、`statusMsg`、`checkCode` |
+| `bot.msg.recall` | 返回 `RecallResult`，看 `recalled` |
+| `bot.grp.*` / `bot.chat.setting` 等操作 | 返回 `ActionResult`，看 `statusCode` |
+| 列表与资料查询 | 失败时抛 `SdkError` |
+
+<Note>
+`bot.msg.send` 传入不支持的消息类型仍会抛 `SdkError`，`data` 中的 `type` 指明类型。返回值与异常两种失败都要检查。
+</Note>
+
+## 日志
+
+SDK 的 warn / error 日志只用于排查，不承载结构化结果。需要定位时把 `data` 交给 `JSON.stringify`，而不是记录空泛的 `message`：
+
+```ts
+if (isErr(e)) log.error(JSON.stringify(e.data))
+```
+
+频繁重连、心跳等重复日志 SDK 不会打印，避免刷屏；这部分状态通过 `reconnecting` 事件观察。

@@ -1,0 +1,212 @@
+import { Note, Tip, Warn } from '@/components/mdx/callout'
+
+# sticker
+
+表情贴纸资源，入口为 `bot.sticker.*`。走浏览器 Cookie 直调，无需额外签名。
+
+## 概览
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `list(options?)` | `{ scenes?, cursor?, limit? }` | `StickerPage` |
+| `favs()` | 无 | `StickerPage` |
+| `gifs()` | 无 | `StickerPage` |
+| `collect(ids, options?)` | `string[]`、`{ remove? }` | `StickerCollectResult` |
+| `trending(options?)` | `{ cursor?, count? }` | `StickerPage` |
+| `strategy(scenes?)` | `string[]?` | `StrategyConfig` |
+| `privacyImage(uri, options?)` | `string`、`{ format?, tpl? }` | `string[]` |
+
+<Warn>
+资源列表接口（aggregation）没有浏览器签名时会被风控，返回非 JSON 文本 `blocked`，SDK 环境下通常不可用。需要表情数据或发 lite_emoji 表情消息时优先用 `trending()`。
+</Warn>
+
+<Note>
+贴纸 id 不需要硬编码：从 `StickerPage.list` 的 `Sticker.id` 或 `Sticker.static.uri` 取即可，可直接传给 `bot.msg.send` 的 `emoji` 字段。
+</Note>
+
+### list
+
+```ts
+list(options?: { scenes?: string; cursor?: number; limit?: number }): Promise<StickerPage>
+```
+
+表情资源列表，`scenes` 决定返回哪套贴纸。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `options.scenes` | `string?` | 面板场景，缺省 `CUSTOM_STICKER_PAGE`（我的收藏） |
+| `options.cursor` | `number?` | 翻页游标，缺省 `0` |
+| `options.limit` | `number?` | 单页条数，缺省 `50` |
+
+返回 `StickerPage`（见[数据结构](#数据结构)）。
+
+```ts
+const page = await bot.sticker.list()
+```
+
+失败时的 `err.data`：接口 `status_code` 非 0 时为上游 `data`；被风控返回非 JSON 文本时抛 `SyntaxError`（非 `SdkError`）。
+
+### favs
+
+```ts
+favs(): Promise<StickerPage>
+```
+
+我的收藏表情，等价于 `list()` 的缺省入参。
+
+```ts
+const page = await bot.sticker.favs()
+```
+
+失败时的 `err.data` 同 `list`。
+
+### gifs
+
+```ts
+gifs(): Promise<StickerPage>
+```
+
+动图表情：先取收藏列表，再过滤出带 `animate` 的贴纸（GIF 没有独立接口）。
+
+```ts
+const page = await bot.sticker.gifs()
+for (const s of page.list) {
+  const url = s.animate?.urls[0]
+}
+```
+
+失败时的 `err.data` 同 `list`。
+
+### collect
+
+```ts
+collect(ids: string[], options?: { remove?: boolean }): Promise<StickerCollectResult>
+```
+
+收藏 / 取消收藏表情。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `ids` | `string[]` | 贴纸 id 列表 |
+| `options.remove` | `boolean?` | `true` 取消收藏，缺省收藏 |
+
+返回 `StickerCollectResult`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ids` | `string[]` | 实际成功收藏 / 取消的贴纸 id |
+
+```ts
+await bot.sticker.collect([sticker.id])
+await bot.sticker.collect([sticker.id], { remove: true })
+```
+
+失败时的 `err.data`：接口 `status_code` 非 0 时为上游 `data`。
+
+### trending
+
+```ts
+trending(options?: { cursor?: number; count?: number }): Promise<StickerPage>
+```
+
+热门表情分页，对应官方面板「贴纸」分区，也是 lite_emoji 表情消息的推荐数据源。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `options.cursor` | `number?` | 翻页游标，缺省 `0` |
+| `options.count` | `number?` | 单页条数，缺省 `50` |
+
+返回 `StickerPage`；热门页没有总量，`total` 恒为 `0`，是否结束看 `done`（由上游 `has_more` 取反）。
+
+```ts
+let page = await bot.sticker.trending()
+const all = [...page.list]
+while (!page.done) {
+  page = await bot.sticker.trending({ cursor: page.cursor })
+  all.push(...page.list)
+}
+```
+
+失败时的 `err.data`：没有显式前置校验；上游缺 `emoticon_data` 时返回空列表。
+
+### strategy
+
+```ts
+strategy(scenes?: string[]): Promise<StrategyConfig>
+```
+
+app 能力开关：决策树与动效资源包配置。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `scenes` | `string[]?` | 场景列表，缺省 `['interactive_resources']` |
+
+返回 `StrategyConfig`：`decisionTrees?`、`interactiveResourceConfig?`（缺省字段省略）。
+
+```ts
+const cfg = await bot.sticker.strategy()
+```
+
+失败时的 `err.data`：没有显式前置校验；上游缺对应字段时返回空对象。
+
+### privacyImage
+
+```ts
+privacyImage(uri: string, options?: { format?: string; tpl?: string }): Promise<string[]>
+```
+
+把图源 `uri` 渲染为打码图（分享卡片脱敏头像 / 昵称场景），返回 CDN 直链列表。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `uri` | `string` | 图源资源 id（不含域名与后缀） |
+| `options.format` | `string?` | 成图模板，缺省 `tplv-x-get:large.image` |
+| `options.tpl` | `string?` | CDN 拼链模板，缺省 `%s://%v/%v~%v` |
+
+```ts
+const urls = await bot.sticker.privacyImage('tos-cn-o-00061/a3bd2fd80ea94219bc83428c5d2a5676')
+```
+
+失败时的 `err.data`：上游响应缺 `pack_results[0].UrlList` 时为上游 `data`。
+
+## 数据结构
+
+```ts
+interface Sticker {
+  id: string          // 贴纸 id（服务端 number 会丢精度，统一用字符串）
+  type: number        // sticker_type，如 2=表情贴纸
+  name?: string       // 显示名，如 [微笑]；空串不返回
+  hash?: string
+  source?: string     // 来源标记，如 comment_emoji
+  static?: StickerImage   // 静态图
+  animate?: StickerImage  // 动图（webp / gif 载体）
+}
+
+interface StickerImage {
+  width: number
+  height: number
+  uri: string
+  urls: string[]      // CDN 直链，带签名时效
+}
+
+interface StickerPage {
+  list: Sticker[]
+  total: number       // 热门页恒为 0
+  cursor: number      // 下一页游标
+  done: boolean
+}
+
+interface StickerCollectResult {
+  ids: string[]
+}
+```
+
+<Tip>
+发送表情消息时，`emoji` 字段支持小表情 id、`im-resource` 资源 id 和完整 CDN 直链三种形态，详见 [msg 的消息体](/docs/api/msg#消息体)。
+</Tip>
+
+## 错误
+
+- 上游失败 → `err(上游响应体)`：接口返回 `status_code` 非 0 或缺少约定字段时为上游 `data`。
+- SDK 前置校验 → `err({ 字段 })`：本域没有前置校验，参数原样进入请求。
+- 风控返回纯文本时 `JSON.parse` 抛原生 `SyntaxError`，不是 `SdkError`；`isErr` 判别后仍需兜底其他异常。

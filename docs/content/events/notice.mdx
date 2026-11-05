@@ -1,0 +1,187 @@
+import { Note } from '@/components/mdx/callout'
+
+# notice
+
+除消息本体之外的业务通知：表情回应、消息撤回、会话变更、好友关系与群事件。
+
+## 事件含义
+
+`notice` 是单参数事件，载荷 `NoticeEvent` 为按 `type` 判别的联合类型，用 `switch (n.type)` 即可收窄。
+
+通知来自两条通道：
+
+- 原生通知帧：已读同步（`conversation.read`）、会话更新（`conversation.update`）、好友关系（`friend.*`）、输入状态（`conversation.typing`）
+- 命令消息帧：撤回（`message.recall`）、会话删除（`conversation.delete`）、群成员进出（`group.member-*`）、群信息变更（`group.admin` / `group.name-change` / `group.avatar-change` / `group.dismiss`）；其余命令帧落到 `im.command`
+
+好友申请与入群申请不走这里，见 [request](/docs/events/request)。
+
+<Note>
+同一帧里既有通知又有消息时，通知先分发，消息随后到达。
+</Note>
+
+## 公共字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | `string` | 事件类型，取值见各小节 |
+| `conversationId` | `string` | 会话 id；好友事件不带此字段 |
+| `conversationShortId` | `string` | 群会话短 id，群事件默认取推送值或回退 `conversationId` |
+| `conversationType` | `number` | `1` 私聊 / `2` 群聊；`message.reaction` 与好友事件不带 |
+| `raw` | `object` | 原始推送解析结果（表情回应等部分事件为空对象） |
+
+`members` 与 `operators` 的元素为 `NoticeUser`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `uid` | `string` | 用户 uid |
+| `secUid` | `string?` | 用户 sec uid |
+| `nickname` | `string?` | 昵称（部分帧不带） |
+
+## 消息类
+
+### message.reaction
+
+消息表情回应（添加或移除）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `conversationId` | `string` | 会话 id |
+| `serverMessageId` | `string` | 被表态的消息 id |
+| `emoji` | `string` | 表态键值，如 `[爱心]` |
+| `operatorUid` | `string` | 表态者 uid（缺失时为空串） |
+| `isSet` | `boolean` | `true` 添加 / `false` 移除 |
+
+### message.recall
+
+消息被撤回（`messageType=40001`，信息主要在 `ext`）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `serverMessageId` | `string?` | 被撤回消息 id |
+| `targetClientMessageId` | `string?` | 被撤回消息的客户端 id |
+| `recallUid` | `string?` | 撤回操作者 uid |
+| `recallRole` | `number?` | 撤回者身份（实测为 `1`） |
+| `ext` | `Record<string, string>?` | 原始 ext（f:9 键值） |
+
+## 会话类
+
+### conversation.read
+
+会话已读状态同步。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `readMessageIndex` | `string` | 已读游标，缺省 `'0'` |
+| `readMessageIndexV2` | `string` | 已读游标 v2，缺省 `'0'` |
+
+### conversation.typing
+
+对方输入状态，客户端有内容时周期上报，需要自行节流。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `peerUid` | `string` | 双人对话对端 uid |
+| `peerSecUid` | `string?` | 对端 sec uid |
+| `senderUid` | `string` | 正在输入的成员 uid（缺省回退 `peerUid`） |
+| `typing` | `boolean` | `true` 正在输入 / `false` 已停止 |
+
+### conversation.update
+
+会话信息有更新，除公共字段外没有附加载荷；需要最新资料时先按 `conversationId` 从会话列表定位 `chatId`，再调用 `bot.chat.info(chatId)`。
+
+### conversation.delete
+
+会话被删除（`messageType=50005`）。群解散时也会随之下发，`ext[':dissolv_his']` 为解散标记。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ext` | `Record<string, string>?` | 原始 ext（f:9 键值） |
+
+## 好友类
+
+### friend.increase / friend.decrease
+
+好友关系建立或解除。两者字段相同。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `peerUid` | `string` | 对端 uid |
+| `fromUid` | `string?` | 申请链路发起方 uid |
+| `toUid` | `string?` | 申请链路接收方 uid |
+| `content` | `string?` | 原始 content 字符串 |
+
+## 群事件
+
+### group.member-increase
+
+群成员加入，一条事件可包含多人。`members` 是加入的成员，`operators` 是执行操作的人。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `source` | `string` | 加入方式：`invite` / `command` / `qrcode` / `duoshan` / `apply` / `search` / `activity` / `face-to-face` / `circle` / `rejoin` |
+| `members` | `NoticeUser[]` | 加入的成员 |
+| `operators` | `NoticeUser[]` | 操作者 |
+
+`rejoin` 来自 `messageType=50011` 的成员状态 diff，表示被移出后重新入群。
+
+### group.member-decrease
+
+群成员退出。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `source` | `string` | `kick` 被移出 / `leave` 主动退群 |
+| `members` | `NoticeUser[]` | 退出的成员 |
+| `operators` | `NoticeUser[]` | 操作者；主动退群时为空数组 |
+
+### group.admin / group.name-change / group.avatar-change / group.dismiss
+
+四条群属性类通知共用 `conversationId`、`conversationShortId`、`conversationType` 与 `operators`。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `members` | `NoticeUser[]` | `group.admin` 被设为管理员的成员 |
+| `enabled` | `boolean` | `group.admin` 恒为 `true` |
+| `name` | `string?` | `group.name-change` 新群名，取不到时缺省 |
+| `avatar` | `string?` | `group.avatar-change` 新头像 URL，取不到时缺省 |
+| `operatorUid` | `string?` | `group.dismiss` 解散者 uid，取不到时缺省 |
+
+## 未分类指令
+
+### im.command
+
+未归类的命令消息帧兜底，保留原始类型与内容。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `messageType` | `number` | 原始消息类型 |
+| `content` | `string` | 原始 content 字符串 |
+
+## 注册示例
+
+```ts
+bot.on('notice', n => {
+  switch (n.type) {
+    case 'message.recall':
+      console.log(`[${n.conversationId}] 撤回消息 ${n.serverMessageId}`)
+      break
+    case 'conversation.typing':
+      if (n.typing) console.log(`${n.peerUid} 正在输入`)
+      break
+    case 'group.member-increase':
+      console.log(`${n.members.map(m => m.nickname ?? m.uid).join('、')} 加入群 ${n.conversationId}`)
+      break
+    case 'group.dismiss':
+      console.log(`群 ${n.conversationId} 已解散`)
+      break
+  }
+})
+```
+
+## 注意事项
+
+- `conversation.typing` 是周期性上报，建议按会话节流后再处理，避免高频回调。
+- 系统通知在自发过滤之前分流：自己拉人入群、改群名等操作同样会触发对应的 `notice`。
+- 群成员增删可能同时出现在 [status](/docs/events/status) 的 `memberChange`：`status` 给完整 diff，`notice` 给昵称与操作者。
+- 未识别的 `1001` 系统消息不会进入 `notice`，而是按模板渲染为 `text` 走 [message](/docs/events/message)。
+- 字段缺失时优先查 `raw`，SDK 不对未建模内容做二次解析。

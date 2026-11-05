@@ -1,0 +1,268 @@
+import { Note, Warn } from '@/components/mdx/callout'
+
+# media
+
+媒体上传与解析，入口为 `bot.media.*`。所有媒体入参都是 `MediaInput`（`Uint8Array` / `ArrayBuffer` / 本地路径 / URL / base64 串），SDK 只解析、不判断来源；解析失败为 `err({ input })`。
+
+## 概览
+
+| 方法 | 入参 | 返回 |
+|------|------|------|
+| `image(input)` | `MediaInput` | `ImageAsset` |
+| `video(input)` | `MediaInput` | `VideoAsset` |
+| `file(input, name?)` | `MediaInput`、可选 `string` | `FileUploadAsset` |
+| `videoUrl(tkey)` | `string` | `EncryptedVideoUrl` |
+| `awemeDetail(awemeIds, options?)` | `string[]`、可选选项对象 | `AwemeDetail[]` |
+| `getPeer(req)` | `GetPeerRequest` | `GetPeerResult` |
+| `emojiList()` | 无 | `EmojiInfo[]` |
+
+<Note>
+上传返回的资产可以直接传给 [`bot.msg.send`](/docs/api/msg) 的媒体字段；也可以跳过这一步，直接在 `send` 里给 `MediaInput`，由 SDK 自动上传。
+</Note>
+
+### image
+
+```ts
+image(input: MediaInput): Promise<ImageAsset>
+```
+
+上传图片，返回的资产可作图片消息载荷，也可作视频封面（`poster`）。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `input` | `MediaInput` | 图片来源 |
+
+返回 `ImageAsset`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `oid` | `string` | 资源 id |
+| `skey` | `string` | 资源密钥 |
+| `md5` | `string` | 源文件 md5 |
+| `dataSize` | `number` | 字节数 |
+| `width` / `height` | `number` | 像素尺寸（commit 未回传时从文件头解析） |
+| `format` | `ImageFormat?` | `webp` / `jpeg` / `png` / `gif` / `heic` |
+
+```ts
+const img = await bot.media.image(new Uint8Array(pngBytes))
+await bot.msg.send(chatId, { type: 'image', image: img })
+```
+
+失败时的 `err.data`：`{ input }` 解析失败；`{ bytes: 0 }` 空内容；`{ format }` 魔数嗅探失败（仅支持 webp / jpeg / png / gif / heic）；上游失败为响应体或上传配置对象。
+
+### video
+
+```ts
+video(input: MediaInput): Promise<VideoAsset>
+```
+
+上传视频（分片上传）。返回的资产可配合封面与尺寸发送。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `input` | `MediaInput` | 视频来源 |
+
+返回 `VideoAsset`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `tkey` | `string` | 视频资源 id；可用 `videoUrl` 换播放地址 |
+| `skey` | `string` | 资源密钥（CENC 解密也需要它） |
+| `md5` | `string` | 源文件 md5 |
+
+```ts
+const video = await bot.media.video(new Uint8Array(mp4Bytes))
+const poster = await bot.media.image(new Uint8Array(jpegBytes))
+await bot.msg.send(chatId, { type: 'video', video: { asset: video, poster, width: 720, height: 1280 } })
+
+// 封面与尺寸全省略：SDK 抽首帧当封面并自动探测尺寸
+await bot.msg.send(chatId, { type: 'video', video: { asset: video } })
+```
+
+失败时的 `err.data`：`{ input }` 解析失败；`{ bytes: 0 }` 空内容；上游失败为响应体或上传地址对象。
+
+### file
+
+```ts
+file(input: MediaInput, name?: string): Promise<FileUploadAsset>
+```
+
+上传普通文件（object 通道，服务端加密，单个文件上限 10 MiB）。`name` 缺省从来源推断（路径或 URL 的最后一段，取不到时为 `file`）。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `input` | `MediaInput` | 文件来源 |
+| `name` | `string?` | 文件名，缺省从来源推断 |
+
+返回 `FileUploadAsset`：`uri`、`skey`、`md5`、`name`、`dataSize`。
+
+```ts
+const f = await bot.media.file(new Uint8Array(bytes), '报表.xlsx')
+await bot.msg.send(chatId, { type: 'file', file: f })
+```
+
+失败时的 `err.data`：`{ input }` 解析失败；`{ name, bytes }` 文件名为空、内容为空或超过 10 MiB；上游失败为响应体或上传地址对象。
+
+<Warn>
+文件消息部分客户端版本渲染异常（如无法预览）；文本 / 图片 / 视频不受影响。
+</Warn>
+
+### videoUrl
+
+```ts
+videoUrl(tkey: string): Promise<EncryptedVideoUrl>
+```
+
+用消息视频的 `tkey` 换加密 CDN 播放地址。私信视频不直发播放 URL，只下发 `tkey`；消息事件下发前 SDK 已自动换取到 `msg.video.url`，过期后可调此方法重取。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `tkey` | `string` | 视频资源 id |
+
+返回 `EncryptedVideoUrl`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `mainUrl` | `string` | 主地址 |
+| `backupUrl` | `string?` | 备用地址 |
+| `expireTime` | `number?` | 签名过期时间（秒级时间戳） |
+
+```ts
+bot.on('message', async msg => {
+  if (msg.type !== 'video') return
+  const url = await bot.media.videoUrl(msg.video.tkey)
+})
+```
+
+失败时的 `err.data`：`{ tkey }` 空串；上游响应缺 `main_url` 时为上游响应体。
+
+<Warn>
+地址指向 CENC 加密流，下载后需用 `decryptCencMp4` 解密才能播放。缩略图可用视频的 `poster` 或 `inlinePic`（内置 base64，不过期）。
+</Warn>
+
+### awemeDetail
+
+```ts
+awemeDetail(
+  awemeIds: string[],
+  options?: { originType?: string; requestSource?: number; conversationShortId?: string },
+): Promise<AwemeDetail[]>
+```
+
+按 `awemeId` 批量拉作品详情（视频 / 图文）。返回摘要字段，完整结构在 `raw`。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `awemeIds` | `string[]` | 作品 id 列表 |
+| `options.originType` | `string?` | 来源，缺省 `chat` |
+| `options.requestSource` | `number?` | 请求来源，缺省 `3` |
+| `options.conversationShortId` | `string?` | 会话短 id（入站消息自带） |
+
+返回 `AwemeDetail[]`：`awemeId`、`desc?`、`createTime?`、`playUrls?`、`coverUrls?`、`author?`（`secUid` / `nickname` / `avatar`）、`raw`。
+
+```ts
+bot.on('message', async msg => {
+  if (msg.type !== 'share') return
+  const details = await bot.media.awemeDetail([msg.share.itemId], {
+    conversationShortId: msg.conversationShortId,
+  })
+})
+```
+
+失败时的 `err.data`：没有前置校验；响应缺 `aweme_details` 时返回空数组，缺省字段省略不报错。
+
+### getPeer
+
+```ts
+getPeer(req: GetPeerRequest): Promise<GetPeerResult>
+```
+
+按文件信息调度 CDN 传输节点。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `req.appId` | `number?` | 应用 id，缺省 `6383` |
+| `req.sid` | `number?` | 会话 id，缺省 `5` |
+| `req.taskType` | `number?` | 任务类型，缺省 `1` |
+| `req.fileInfo` | `Record<string, unknown>` | 原样透传（`vid` / `cdn_url` / `file_type` / `sfid` 等） |
+
+返回 `GetPeerResult`：`status`、`fid`、`traceId`、`reqId`、`token`、`nodes`、`multiNodes?`、`indexNum`、`countryCode`、`ispCode`。
+
+```ts
+const peer = await bot.media.getPeer({ fileInfo: { vid, file_type: 'dash' } })
+```
+
+失败时的 `err.data`：上游响应缺 `Result` 时为响应体。
+
+### emojiList
+
+```ts
+emojiList(): Promise<EmojiInfo[]>
+```
+
+官方小表情全量映射（约 214 项），用作表态 / 文本键值数据源。
+
+返回 `EmojiInfo[]`：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 拼音资源名，如 `weixiao` |
+| `name` | `string` | 显示键值，如 `[微笑]` |
+| `uri` | `string` | 资源路径 |
+| `urls` | `string[]` | CDN 直链（带签名时效） |
+
+```ts
+const emojis = await bot.media.emojiList()
+emojis.find(e => e.id === 'weixiao') // { id: 'weixiao', name: '[微笑]', ... }
+```
+
+失败时的 `err.data`：没有前置校验；上游缺 `emoji_list` 时返回空数组；HTTP 非 2xx 或返回非 JSON 时抛出原生错误。
+
+<Warn>
+这是 `tos-cn` 表态域资源，不能用于发送表情消息（服务端会标记为仅发送者可见）。发送请用 `bot.sticker.trending()` 的直链，键值可直接用于 `bot.msg.react`。
+</Warn>
+
+## 输入源
+
+`MediaInput` 的解析顺序固定，与扩展名和协议无关：
+
+| 输入 | 处理 |
+|------|------|
+| `Uint8Array` | 原样使用 |
+| `ArrayBuffer` | 转为 `Uint8Array` |
+| `string` | 依次尝试：读本地文件 → `fetch` 下载 → 按 base64 解码（去掉 `base64://` 前缀与空白字符） |
+
+全部失败才抛出 `err({ input })`，原始字符串原样放在 `data.input`。
+
+```ts
+await bot.media.image('https://example.com/cat.jpg')
+await bot.media.image('D:/pictures/cat.jpg')
+await bot.media.image('base64://iVBORw0KGgo...')
+await bot.media.image(new Uint8Array(bytes))
+```
+
+## 视频解密
+
+```ts
+import { decryptCencMp4 } from 'douyin.ts'
+
+decryptCencMp4(data: Uint8Array, keyHex: string): Buffer
+```
+
+把 CENC(cenc 方案) 加密的 mp4 解密为可直接播放的 mp4，密钥即消息的 `video.skey`（32 位 hex）。未加密的输入原样返回。SDK 不代下载视频。
+
+```ts
+bot.on('message', async msg => {
+  if (msg.type !== 'video' || !msg.video.url) return
+  const res = await fetch(msg.video.url.mainUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+  const mp4 = decryptCencMp4(new Uint8Array(await res.arrayBuffer()), msg.video.skey)
+})
+```
+
+失败时的 `err.data`：`{ length }` 密钥不是 32 位 hex；`{ bytes }` 不是合法 mp4（缺 `moov` 或 `mdat`）。
+
+## 错误
+
+- 上游失败 → `err(上游响应体)`：上传链路为 VOD / TOS 返回的 JSON 或配置对象，业务接口为上游 `data`。
+- SDK 前置校验 → `err({ 字段 })`：如 `{ input }`、`{ bytes }`、`{ format }`、`{ name }`、`{ tkey }`、`{ length }`。
+- 统一用 `isErr(e)` 判别，`e.data` 即上述形态。

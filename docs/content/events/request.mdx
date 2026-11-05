@@ -1,0 +1,70 @@
+import { Note } from '@/components/mdx/callout'
+
+# request
+
+好友申请与入群申请到达时触发的信号事件。
+
+## 事件含义
+
+`request` 只是「有申请发生」的信号，载荷里没有完整的待处理列表。收到后应调用 `bot.frd.requests()` 或 `bot.grp.requests()` 拉取列表，再对列表项执行同意/拒绝。
+
+申请不会自动处理，SDK 也不会轮询；若推送丢失，只能主动调列表接口补查。
+
+## 事件对象字段
+
+载荷是 `RequestEvent`，按 `type` 分为两种。
+
+### friend.request
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | `string` | 固定为 `friend.request` |
+| `applicantUid` | `string` | 申请人 uid |
+| `fromUid` | `string?` | 申请链路发起方 uid |
+| `toUid` | `string?` | 申请链路接收方 uid |
+| `content` | `string?` | 原始 content 字符串，申请留言在其中 |
+| `raw` | `object` | 原始推送解析结果 |
+
+### group.join-request
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | `string` | 固定为 `group.join-request` |
+| `conversationId` | `string` | 群会话 id |
+| `conversationShortId` | `string` | 群会话短 id |
+| `conversationType` | `number` | 通常为 `2` |
+| `requestId` | `string?` | 申请 id；取不到时缺省 |
+| `content` | `string` | 原始 content JSON 字符串（含 `apply_info`） |
+| `raw` | `object` | 原始推送解析结果 |
+
+## 注册示例
+
+```ts
+bot.on('request', async req => {
+  if (req.type === 'friend.request') {
+    const list = await bot.frd.requests()
+    const item = list.find(i => i.applicantUid === req.applicantUid)
+    if (item) await bot.frd.approve(item.applicantUid)
+    return
+  }
+
+  const list = await bot.grp.requests()
+  const item = list.find(i => i.requestId === req.requestId)
+  if (item) await bot.grp.approve(item.requestId)
+})
+```
+
+好友审核接口为 `bot.frd.approve(uid)` / `bot.frd.reject(uid)`，入群审核接口为 `bot.grp.approve(requestId)` / `bot.grp.reject(requestId)`。
+
+## 注意事项
+
+<Note>
+`request` 与 [notice](/docs/events/notice) 共用推送通道，但两者互斥：申请类事件只会从 `request` 发出。
+</Note>
+
+- 申请事件可能重复推送，按 `applicantUid` 或 `requestId` 去重后再处理。
+- 群申请事件里的 `requestId` 可能缺省，此时可调 `bot.grp.requests(chatId?)` 拉取待处理列表后处理，或从 `content` 的 `apply_info` 解析申请人再匹配。
+- `content` 是服务端原始 JSON，结构未建模，其余字段按需自行解析。
+- `bot.frd.requests(status)` 可按 `FriendRequestStatus`（PENDING / APPROVED / REJECTED / INVALID）过滤；群申请同理有 `GroupJoinRequestStatus`。
+- 审核结果看返回值的 `statusCode`（非 `0` 表示失败），业务失败不一定抛错。
+- 具体接口见 [frd](/docs/api/frd) 与 [grp](/docs/api/grp)。

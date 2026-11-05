@@ -1,0 +1,72 @@
+import { Note } from '@/components/mdx/callout'
+
+# voip
+
+收到 1v1 语音或视频来电响铃时触发的通话信令事件。
+
+## 事件含义
+
+`voip` 的载荷是 `voip.call`，对应 `messageType=50018` 的响铃信令：有人向当前账号发起语音/视频通话。SDK 只负责把信令解析成事件，不接听、不应答，也不会自动挂断。
+
+出站拨打可用 `bot.msg.call(chatId, calleeUid)`，但服务端目前没有开放 VOIP 通道，返回值带 `statusCode=-1`。
+
+## 事件对象字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | `string` | 固定为 `voip.call` |
+| `conversationId` | `string` | 会话标识（私聊） |
+| `conversationType` | `number` | `1` 私聊 / `2` 群聊 |
+| `callerUid` | `string` | 主叫用户数字 uid（取推送发送者） |
+| `callId` | `string` | 通话 id |
+| `roomId` | `string` | RTC 房间 id（通话唯一标识） |
+| `voipType` | `number` | 通话形态，实测恒为 `1`（1v1） |
+| `callType` | `number` | 呼叫类型 |
+| `cameraOff` | `number` | `0` 视频通话 / `1` 语音通话 |
+| `callInfo` | `object` | 原始 `call_info`，含 RTC 入会参数与 participants 等全量字段 |
+
+### callInfo 常见子字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `participants` | `unknown` | 通话参与者信息，结构随服务端版本变化 |
+| `individual` | `unknown` | 1v1 通话参数，`live_core_param` 等 RTC 入会参数在此 |
+| `init_state` | `unknown` | 与会话初始状态相关的字段 |
+
+`callInfo` 整体未建模，其余字段按原始对象透传。
+
+## 如何区分语音与视频
+
+| 字段 | 取值 | 含义 |
+|------|------|------|
+| `cameraOff` | `0` | 视频通话，发起时摄像头开启 |
+| `cameraOff` | `1` | 语音通话 |
+| `voipType` | `1` | 1v1 通话形态，与媒体类型无关 |
+| `callType` | 服务端数值 | 呼叫类型，不要用来判断语音/视频 |
+
+## 注册示例
+
+```ts
+bot.on('voip', e => {
+  const kind = e.cameraOff === 1 ? '语音' : '视频'
+  console.log(`${e.callerUid} 发起${kind}通话 room=${e.roomId} callId=${e.callId}`)
+})
+```
+
+## 典型处理流程
+
+1. 收到 `voip` 后按 `cameraOff` 展示来电类型，用 `callerUid` 补拉昵称或头像。
+2. 从 `callInfo` 读取 `individual.live_core_param` 等 RTC 参数并加入房间。
+3. 自行实现接听/拒绝/超时的信令与计时，SDK 不提供这些动作。
+4. 需要按通话聚合时用 `roomId` 分组，`callId` 作为单次通话标识。
+
+## 注意事项
+
+<Note>
+区分语音/视频看 `cameraOff`，不要看 `voipType`：后者表示 1v1 通话形态，不是媒体类型。
+</Note>
+
+- `callInfo` 未建模，接听所需的 RTC 入会参数（如 `individual.live_core_param`）需自行从该对象读取。
+- 来电信令在自发过滤之前分发，因此自己发起的响铃同样会收到。
+- 事件只代表响铃，后续接听/挂断/超时不会再有 `voip` 事件；通话状态需要自行通过 `callInfo` 接入 RTC 后维护。
+- `content` 解析失败或缺少 `call_info` 时不会发事件，避免上层收到不完整通话对象。

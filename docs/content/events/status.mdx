@@ -1,0 +1,89 @@
+import { Warn } from '@/components/mdx/callout'
+
+# status
+
+会话状态变更事件（未读红点、已读游标、消息删除、群属性与群成员变更）。
+
+## 事件含义
+
+`status` 对应 `messageType=50001`，是高频事件，自发操作也会下发。具体语义由 `commandType` 决定，同一个事件里可能只带其中一类载荷。
+
+事件在自发消息过滤之前分发，因此本机操作（自己发消息、自己标记已读等）同样会触发。
+
+## 事件对象字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | `string` | 固定为 `status` |
+| `conversationId` | `string` | 会话标识 |
+| `conversationType` | `number` | `1` 私聊 / `2` 群聊 |
+| `commandType` | `number` | 变更类型，见下表 |
+| `unread` | `number?` | 未读计数，仅红点同步类携带 |
+| `readIndex` | `string` | 已读游标 |
+| `messageId` | `string?` | 被删消息 id（删除帧携带，取自服务端 `server_message_id`） |
+| `nameChange` | `{ name: string; operatorUid: string }?` | 群名变更 |
+| `avatarChange` | `{ icon: string; operatorUid: string }?` | 群头像变更 |
+| `memberChange` | `object?` | 群成员变更，字段见下 |
+| `extData` | `{ key: string; value: string; version: number; opType: number }[]?` | 会话属性变更项（如 `a:chat_theme`） |
+| `raw` | `object` | 原始 content |
+
+### commandType
+
+| 取值 | 含义 |
+|------|------|
+| `1` / `14` | 红点计数与已读游标同步，通常带 `unread` |
+| `2` | 消息删除，`messageId` 指向被删消息 |
+| `6` | 会话属性变更：群名、群头像、主题等 |
+| `7` | 群成员变更：增删成员、角色、群主、群昵称 |
+
+### memberChange
+
+`commandType=7` 时携带。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `added` | `string[]` | 新增成员 uid |
+| `removed` | `string[]` | 移除成员 uid |
+| `updated` | `GroupMemberUpdate[]` | 资料变更明细，见下表 |
+| `oldOwnerId` | `string?` | 变更前群主，仅群主移交帧与 `newOwnerId` 成对出现 |
+| `newOwnerId` | `string?` | 变更后群主，非 `0` 即发生群主移交 |
+
+`updated[]` 的字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `uid` | `string` | 成员 uid |
+| `role` | `number` | `0` 普通成员 / `1` 群主 / `2` 管理员 |
+| `secUid` | `string?` | 成员 sec uid |
+| `alias` | `string?` | 群昵称：下发即表示被变更，空串表示被清空 |
+
+## 注册示例
+
+```ts
+bot.on('status', e => {
+  if (e.unread != null) {
+    console.log(`${e.conversationId} 有 ${e.unread} 条未读`)
+  }
+
+  if (e.nameChange) {
+    console.log(`群名变更为「${e.nameChange.name}」`)
+  }
+
+  for (const u of e.memberChange?.updated ?? []) {
+    if (u.alias != null) console.log(`${u.uid} 群昵称改为「${u.alias}」`)
+  }
+})
+```
+
+## 注意事项
+
+<Warn>
+`status` 是高频事件，直接打印日志会淹没输出；先用 `commandType` 过滤，再做节流。
+</Warn>
+
+- `nameChange` / `avatarChange` 只在 `commandType=6` 且 `extData` 含对应判定键时出现；改名帧也可能带头像键，SDK 优先判改名。
+- `updated[].alias` 未下发表示本帧未涉及昵称；有值是新昵称，空串是被清空。`added` / `removed` 均为空而 `updated` 非空，即纯成员资料变更。
+- `oldOwnerId` 不能单独用来判断群主移交：普通帧也带现任群主；只有 `newOwnerId` 非 `0` 才是移交。
+- 群成员增删同时可能触发 [notice](/docs/events/notice) 的 `group.member-increase` / `group.member-decrease`，后者带昵称与操作者。
+- 未读计数仅红点同步帧携带，不能把 `unread` 当成恒有字段使用。
+- 用 `bot.off('status', fn)` 取消订阅。

@@ -1,0 +1,64 @@
+import { Note } from '@/components/mdx/callout'
+
+# connection
+
+长连接的重连与关闭事件，用于观察连接生命周期。
+
+## 事件含义
+
+SDK 通过 Cookie 鉴权建立 Android Frontier WebSocket，成功后每 15 秒发送一次心跳。连接断开后自动按指数退避重连，并在每次重连前发 `reconnecting`；连接关闭时发 `close`。
+
+两个事件都发生在接收层，与消息业务无关。
+
+## 事件对象字段
+
+### reconnecting
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `attempt` | `number` | 第几次重连，从 `1` 开始；连接成功后会清零 |
+| `delayMs` | `number` | 本次等待的毫秒数 |
+| `code` | `number?` | 断开时的连接状态码（有则带） |
+| `reason` | `string?` | 断开原因（有则带） |
+
+### close
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `code` | `number?` | 关闭状态码 |
+| `reason` | `string?` | 关闭原因 |
+
+## 重连策略
+
+| 项目 | 行为 |
+|------|------|
+| 退避间隔 | 1s、2s、4s、8s… 封顶 30s |
+| 重连次数 | 不设上限，直到 `bot.stop()` |
+| 成功后计数 | `attempt` 归零 |
+| 首次握手失败 | 不自动重连，`bot.start()` 直接以错误拒绝 |
+| 已建立后断开 | 先发 `close`，再发 `reconnecting` 并自动重试 |
+
+## 注册示例
+
+```ts
+bot.on('reconnecting', e => {
+  console.log(`第 ${e.attempt} 次重连，${e.delayMs}ms 后重试`)
+})
+
+bot.on('close', e => {
+  console.log(`连接关闭 code=${e.code ?? '-'} reason=${e.reason ?? '-'}`)
+})
+```
+
+## 注意事项
+
+<Note>
+`close` 在每次连接断开时都会触发，包括随后会自动重连的情况；不要把它当成「永久断开」的信号。
+</Note>
+
+- 判断是否为终止状态：`close` 之后没有紧跟 `reconnecting`，才说明连接不会再自动恢复。
+- `bot.stop()` 会主动关闭连接并触发 `close`，之后不再重连；同一实例再次调用 `bot.start()` 不会重新建立连接，需新建 `Bot` 实例并注入已持久化的 `device` 再启动。
+- 重连期间 SDK 不打印日志，需要观测时自行在 `reconnecting` 中记录并做节流。
+- 首次握手失败（尚未建立过一次连接）不会进入重连循环，此时应检查 Cookie 是否仍有效。
+- `bot.on` 的回调抛错不会被 SDK 捕获；建议在回调内部自行 `try/catch`，避免影响同事件的其他订阅者。
+

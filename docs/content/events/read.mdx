@@ -1,0 +1,61 @@
+import { Note } from '@/components/mdx/callout'
+
+# read
+
+单聊已读回执事件：对方读了你发送的消息后触发。
+
+## 事件含义
+
+`read` 对应 `messageType=50013`（cmd=504 推送），载荷为 `ReadEvent`。推送里的「发送者」是本机，真正的读方取自 `content.P2PSender`，因此事件给出的是 `readerUid`。
+
+该事件只覆盖 1v1 会话；群聊的已读同步走 [status](/docs/events/status) 与 [notice](/docs/events/notice) 的 `conversation.read`。
+
+`read` 只表示「读到」这一事实，不携带消息正文，需要原文时用 `messageId` 查历史。
+
+## 事件对象字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `type` | `string` | 固定为 `read` |
+| `conversationId` | `string` | 会话标识（形如 `0:1:uid:uid`） |
+| `readerUid` | `string` | 已读方用户数字 uid |
+| `conShortId` | `string` | 会话短 id |
+| `messageId` | `string` | 最新被读消息 id |
+| `readIndex` | `string` | 已读方游标 |
+
+## 游标语义
+
+`readIndex` 是已读方在该会话中的最新位置，`messageId` 是该位置对应的消息 id。
+
+- `messageId` 可用于与自己发出的消息 `serverMessageId` 对比，判断哪条消息被读到。
+- `readIndex` 是字符串形式的大整数游标，不要转成 `number` 做精确比较，避免超出安全整数范围。
+- 需要完整历史仍应调用 `bot.chat.history(chatId)`，回执只表示最新位置。
+
+## 与其他已读信号的区分
+
+| 来源 | 覆盖范围 | 说明 |
+|------|----------|------|
+| `read` 事件 | 单聊 | 对方读到消息时触发，带 `readerUid` |
+| `notice` 的 `conversation.read` | 会话 | 已读游标同步帧，不带读方 uid |
+| `status` | 会话 | `commandType` 为 `1` / `14` 的红点与已读游标同步 |
+| `bot.chat.readIndex(chatId)` | 主动查询 | 返回各成员的 uid 与已读游标 |
+
+## 注册示例
+
+```ts
+bot.on('read', e => {
+  console.log(`${e.readerUid} 已读到消息 ${e.messageId}（游标 ${e.readIndex}）`)
+})
+```
+
+## 注意事项
+
+<Note>
+回执在自发过滤之前分发，因此本机触发的已读动作同样会产生 `read` 事件。
+</Note>
+
+- `messageId` 是最新被读消息，不等于全部已读消息；需要消息级状态时结合 `readIndex` 判断。
+- `content` 里缺少 `P2PSender` 的异常帧不会发事件。
+- 群聊不会走该事件；群成员已读游标可用 `bot.chat.readIndex(chatId)` 查询。
+- 事件不带 `chatId`，需要调用 `bot.msg.*` 时用对应消息事件的 `chatId`，或通过 `conShortId` / `conversationId` 关联。
+- 如需主动把会话标记为已读，用 `bot.msg.read(chatId, msg)`；省略 `msg` 时游标按 `0` 处理。

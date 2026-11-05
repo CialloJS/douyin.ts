@@ -1,0 +1,144 @@
+import { Note, Warn } from '@/components/mdx/callout'
+
+# 配置
+
+`Bot` 的构造参数只有 `BotOpts`。最少只需要 Cookie，其余项按需覆盖。
+
+## 构造 Bot
+
+```ts
+import { Bot } from 'douyin.ts'
+
+const bot = new Bot({ cookie: '登录 Cookie' })
+await bot.start()
+```
+
+`login()` 返回的 `Session` 可以直接传入，多出的 `userData` 等字段不会影响构造：
+
+```ts
+import { Bot } from 'douyin.ts'
+
+const bot = new Bot(session)
+```
+
+## BotOpts
+
+| 选项 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `cookie` | `string` | 必填 | 登录 Cookie，会话的唯一凭据 |
+| `userId` | `string` | 自动获取 | 自身数字 uid；省略时在 `start()` 中查询 |
+| `userAgent` | `string` | 桌面客户端 UA | 需与 Cookie 所在环境一致 |
+| `timeout` | `number` | `30000` | 单次 HTTP 请求超时，单位毫秒 |
+| `selfMessage` | `boolean` | `false` | 是否把自身发出的消息也作为 `message` 事件下发 |
+| `device` | `Device` | 自动注册 | 已持久化的设备身份，注入后跳过注册 |
+| `log` | `Log` | 内置彩色日志 | 自定义日志实现 |
+
+<Note>
+`cookie` 不合法时构造函数不会报错，失败会发生在 `start()` 的首次请求，表现为 `SdkError` 或网络错误。
+</Note>
+
+## 日志
+
+内置日志由 `createLog` 创建，按 `info` / `warn` / `error` 三级输出，带时间戳与颜色：
+
+```ts
+import { Bot, createLog } from 'douyin.ts'
+
+const bot = new Bot({
+  cookie: '登录 Cookie',
+  log: createLog({ tag: 'my-bot' }),
+})
+```
+
+`tag` 用于区分多实例来源；`quiet: true` 会整体关停输出：
+
+```ts
+const log = createLog({ tag: 'my-bot', quiet: process.env.NODE_ENV === 'test' })
+```
+
+也可以完全替换实现，只要满足 `Log` 接口：
+
+```ts
+import type { Log } from 'douyin.ts'
+
+const log: Log = {
+  info: msg => myLogger.info(msg),
+  warn: msg => myLogger.warn(msg),
+  error: msg => myLogger.error(msg),
+}
+```
+
+SDK 不会打印重连心跳这类重复日志，避免长时间运行时刷屏；需要的话在 `reconnecting` 事件里自行记录。
+
+## 生命周期
+
+```ts
+await bot.start() // 建立长连，开始收消息
+bot.id            // 自身数字 uid，start 后可用
+bot.device        // 设备身份，start 后可用
+bot.stop()        // 断开连接
+```
+
+| 成员 | 说明 |
+|------|------|
+| `start()` | 幂等：已启动时直接返回 |
+| `stop()` | 同步断连，不需要 `await` |
+| `id` | `start()` 完成前为空串 |
+| `device` | 未注册设备时返回 `undefined` |
+| `ctx()` | 内部上下文，未启动时抛 `SdkError` |
+
+省掉 `userId` 时，`start()` 会先请求自身资料；拿不到 uid 就会抛 `SdkError`，`data` 是这次资料查询的响应。
+
+<Warn>
+所有 `bot.域.动作` 都依赖启动后的上下文。在 `start()` 之前调用会抛 `SdkError`，`data` 中的 `started` 字段为 `false`。错误判别见 [错误处理](/docs/guide/error)。
+</Warn>
+
+## 设备身份
+
+`start()` 未注入 `device` 时会现场注册设备。把身份落盘复用，可以避免每次启动都被当作新设备：
+
+```ts
+import fs from 'node:fs'
+import { Bot } from 'douyin.ts'
+
+const file = 'device.json'
+const device = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined
+
+const bot = new Bot({ cookie: '登录 Cookie', device })
+await bot.start()
+
+if (bot.device) fs.writeFileSync(file, JSON.stringify(bot.device))
+```
+
+`login()` 返回的 `session.device` 与 `bot.device` 同形，两条路径可以共用同一份文件。注册失败时 SDK 会回退到稳定派生标识并打印 warn 日志，但复用持久化的身份更可靠。
+
+## 自消息
+
+群聊里机器人自己发出的消息默认不会回流成 `message` 事件。需要观察自身消息时打开：
+
+```ts
+const bot = new Bot({ cookie: '登录 Cookie', selfMessage: true })
+
+bot.on('message', msg => {
+  if (msg.senderUid === bot.id) {
+    // 自己发出的消息
+  }
+})
+```
+
+## 超时与网络
+
+`timeout` 直接作用于每次 HTTP 请求的 `AbortSignal.timeout`，默认 30 秒。超时和连接失败不会被包装成 `SdkError`，而是抛原生的 `TimeoutError` / `TypeError`，与 SDK 自身的校验错误区分开。
+
+<Note>
+登录链路的轮询节奏与总时长由 SDK 固定，不受 `BotOpts.timeout` 影响。
+</Note>
+
+## 会话复用
+
+| 场景 | 做法 |
+|------|------|
+| 有完整登录结果 | `new Bot(session)` |
+| 只有 Cookie | `new Bot({ cookie })` |
+
+更多登录态细节见 [登录](/docs/guide/login)。

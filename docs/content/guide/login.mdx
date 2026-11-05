@@ -1,0 +1,208 @@
+import { Note, Tip, Warn } from '@/components/mdx/callout'
+
+# 登录
+
+`login()` 完成一次扫码登录并返回 `Session`。SDK 只负责协议：二维码渲染、验证页打开、验证码输入都通过回调交给调用方，且不会向磁盘写任何东西。
+
+## 最小示例
+
+```ts
+import { login, Bot } from 'douyin.ts'
+
+const session = await login({
+  onQr: qr => renderQr(qr.url),
+  onStatus: s => console.log(s),
+})
+
+const bot = new Bot(session)
+await bot.start()
+```
+
+只需要 Cookie 时也可以跳过 `login()`，直接构造 `Bot`，见 [配置](/docs/guide/config)。
+
+## 登录流程
+
+| 阶段 | 行为 |
+|------|------|
+| 设备 | 未注入 `device` 时注册桌面设备身份 |
+| 取码 | 请求二维码，把地址与图片交给 `onQr` |
+| 轮询 | 约每 1.1 秒查询一次扫码结果 |
+| 验证 | 需要时拉起安全验证页或短信/密码验证 |
+| 收尾 | 组装 `Session`，用真实资料覆盖昵称与头像 |
+
+轮询总时长上限 120 秒；超时抛 `SdkError`，`data` 形如 `{ timeout, status }`。登录失败的错误形态见 [错误处理](/docs/guide/error)。
+
+## 回调选项
+
+| 选项 | 类型 | 说明 |
+|------|------|------|
+| `onQr` | `(qr: { url: string; base64?: string }) => void \| Promise<void>` | 取到二维码后回调 |
+| `onStatus` | `(s: string) => void \| Promise<void>` | 扫码状态与过程提示 |
+| `onVerifyUrl` | `(url: string) => void` | 需要本地安全验证时给出验证页地址 |
+| `onMfa` | `(info: MfaInfo) => string \| Promise<string>` | 需要短信验证码或密码时回调 |
+| `onVerifyWays` | `(ways: VerifyWay[]) => string \| undefined \| Promise<string \| undefined>` | 选择二次验证方式 |
+| `userAgent` | `string` | 覆盖登录链路 UA |
+| `device` | `Device` | 复用已持久化的设备身份 |
+| `log` | `Log` | 自定义日志 |
+
+<Note>
+所有回调都允许返回 Promise，`login()` 会等回调完成后再继续。
+</Note>
+
+## 二维码
+
+`onQr` 收到的是服务端下发的扫码页地址与二维码图片，SDK 不生成也不渲染二维码：
+
+| 字段 | 说明 |
+|------|------|
+| `url` | 扫码页地址；服务端未下发时退回二维码 token |
+| `base64` | 二维码图片，可能带 `data:image/…;base64,` 前缀 |
+
+```ts
+import fs from 'node:fs'
+import { login } from 'douyin.ts'
+
+await login({
+  onQr: qr => {
+    fs.writeFileSync(
+      'qr.png',
+      Buffer.from(qr.base64?.replace(/^data:image\/\w+;base64,/, '') ?? '', 'base64'),
+    )
+  },
+})
+```
+
+## 扫码状态
+
+`onStatus` 会收到两类字符串：服务端状态值，以及 SDK 在验证过程中补的人类可读提示。
+
+| 状态 | 含义 |
+|------|------|
+| `new` | 等待扫码 |
+| `scanned` | 已扫码，等待确认 |
+| `verifying` | 正在完成安全验证或二次验证（SDK 补） |
+| `verified` | 验证通过（SDK 补） |
+| `confirmed` | 已确认，登录即将返回 |
+| `expired` | 二维码已过期 |
+
+同一状态在轮询期间只会回调一次。
+
+<Warn>
+提示串里既有固定状态，也有面向用户的中文句子（如“请前往抖音 App 完成安全验证后继续登录”）。程序判断只比较固定状态值，不要把中文提示当条件。
+</Warn>
+
+## 安全验证
+
+风控、滑块等场景下服务端会下发验证决策，此时回调 `onVerifyUrl`：
+
+```ts
+await login({
+  onQr: qr => renderQr(qr.url),
+  onVerifyUrl: url => openInBrowser(url),
+})
+```
+
+调用方需要在浏览器打开该地址并完成官方验证。验证结果会回填到后续轮询，登录自动继续；同一流程内最多重试 3 次，通过后轮询计时会重新计算。
+
+<Warn>
+不打开验证页也不会报错，但登录会一直等到超时，最终抛 `SdkError`。`onVerifyUrl` 必须真正交付给用户。
+</Warn>
+
+## 二次验证
+
+服务端要求短信或密码验证时，`onMfa` 收到 `MfaInfo`：
+
+| 字段 | 说明 |
+|------|------|
+| `kind` | `sms` 或 `password` |
+| `maskedMobile` | `kind` 为 `sms` 时提供的脱敏手机号，用于展示 |
+
+返回值是验证码或密码：
+
+```ts
+await login({
+  onQr: qr => renderQr(qr.url),
+  onMfa: async info =>
+    info.kind === 'sms' ? askCode(info.maskedMobile) : askPassword(),
+})
+```
+
+未提供 `onMfa` 时无法自动完成短信或密码验证，SDK 会改为提示前往 App 完成安全验证并继续等待；用户始终不处理时，最终以超时结束。
+
+### 选择验证方式
+
+`onVerifyWays` 会收到服务端给出的全部可用方式，返回一个 `verify_way` 名称即可指定使用哪一种。
+
+| verify_way | 说明 |
+|------------|------|
+| `assist_mobile_sms_verify` | 安全手机短信验证码 |
+| `mobile_sms_verify` | 绑定手机短信验证码 |
+| `assist_mobile_up_sms_verify` | 上行短信：用安全手机发指定短信，无需输入 |
+| `pwd_verify` | 登录密码 |
+
+返回 `undefined`（或不提供该回调）时按内置优先级选择：安全手机短信 > 绑定手机短信 > 上行短信 > 登录密码。
+
+```ts
+await login({
+  onQr: qr => renderQr(qr.url),
+  onVerifyWays: ways =>
+    ways.find(w => w.verify_way === 'assist_mobile_up_sms_verify')?.verify_way,
+})
+```
+
+每个方式可带 `mobile`、`sms_content`、`channel_mobile` 等字段，具体以服务端下发为准。返回列表中不存在的名称会让自动验证失败，SDK 同样回退到 App 内安全验证提示并继续轮询。
+
+## 会话
+
+`Session` 是登录的唯一产物：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `userId` | `string` | 数字 uid，握手与消息过滤需要 |
+| `cookie` | `string` | 登录 Cookie，构造 `Bot` 的唯一凭据 |
+| `userData` | 对象（可选） | 账号资料，昵称与头像已用真实资料覆盖 |
+| `device` | `Device`（可选） | 本次登录使用的设备身份 |
+
+`login()` 不落盘，`Session` 的存储由调用方负责。`cookie` 是唯一凭据，`userData` 只用于展示。
+
+## 设备身份
+
+设备身份由服务端签发。每次登录都重新注册会被当成新设备，更容易触发短信二次验证。把 `session.device` 持久化，下次登录传入即可复用：
+
+```ts
+import fs from 'node:fs'
+import { login } from 'douyin.ts'
+
+const file = 'device.json'
+const device = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined
+
+const session = await login({
+  onQr: qr => renderQr(qr.url),
+  device,
+})
+
+if (session.device) fs.writeFileSync(file, JSON.stringify(session.device))
+```
+
+同一份 `device.json` 也可以传给 `Bot`，扫码与复用 Cookie 两条路径共用。
+
+<Tip>
+注册失败时 SDK 会回退到由硬件种子派生的稳定标识，并打印 warn 日志；复用已持久化的身份仍然是最稳的做法。
+</Tip>
+
+## 复用登录态
+
+- 已存完整 `Session`：`new Bot(session)`，免扫码。
+- 只有 Cookie：`new Bot({ cookie })`，`userId` 省略时在 `start()` 中自动获取。
+- 浏览器复制的 Cookie 同样可用，但 UA 需要与 Cookie 所在环境一致。
+
+## 失败排查
+
+| `err.data` 特征 | 原因 | 处理 |
+|----------------|------|------|
+| 含 `timeout` | 超时，用户未扫码或未完成验证 | 重新发起登录 |
+| `status` 为 `expired` | 二维码过期 | 重新取码 |
+| 含 `fatal` | 访问过于频繁，不可重试 | 等待后重新登录 |
+| 含 `userId` | 登录已确认但会话里取不到 uid | 检查 Cookie，必要时重新登录 |
+
+完整判别方式见 [错误处理](/docs/guide/error)。
