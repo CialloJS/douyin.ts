@@ -1,0 +1,55 @@
+{
+  "name": "douyin.ts",
+  "version": "0.6.9",
+  "description": "抖音 Node SDK",
+  "author": "CialloJS",
+  "homepage": "https://github.com/CialloJS/douyin.ts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CialloJS/douyin.ts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CialloJS/douyin.ts/issues"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "main": "dist/index.mjs",
+  "types": "dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist",
+    "assets"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "check": "tsc --noEmit",
+    "demo": "tsx demo/main.ts",
+    "docs": "pnpm --dir docs dev",
+    "docs:build": "pnpm --dir docs build"
+  },
+  "dependencies": {
+    "@napi-rs/image": "^1.15.0",
+    "@napi-rs/webcodecs": "^1.4.2",
+    "protobufjs": "^8.8.0",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "tscanner": "^0.1.3",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
