@@ -13,5 +13,7 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "docs"]
+  // docs 是独立的 Next.js 项目，自带 tsconfig，由 next build 做类型检查
+  "include": ["src"],
+  "exclude": ["docs"]
 }
