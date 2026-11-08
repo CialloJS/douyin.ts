@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.10](https://github.com/CialloJS/douyin.ts/compare/v0.6.9...v0.6.10) (2026-11-08)
+
+
+### Features
+
+* 优化登录轮询逻辑与频控处理，新增二次验证测试 ([01cde47](https://github.com/CialloJS/douyin.ts/commit/01cde479b4f0edd5277df2b2c8b257b8383cd77b))
+
 ## [0.6.9](https://github.com/CialloJS/douyin.ts/compare/v0.6.8...v0.6.9) (2026-11-05)
 
 
