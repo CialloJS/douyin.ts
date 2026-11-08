@@ -149,9 +149,9 @@ try {
 } catch (e) {
   if (!isErr(e)) throw e
 
-  const d = e.data as { timeout?: number; status?: string; fatal?: boolean }
-  if (d.fatal) {
-    // 访问过于频繁，重试只会更糟
+  const d = e.data as { timeout?: number; status?: string; error_code?: number }
+  if (d.error_code === 7) {
+    // 频控：SDK 已退避重试，仍失败说明此刻请求过于频繁，稍后再登录
     return
   }
   if (d.timeout) {

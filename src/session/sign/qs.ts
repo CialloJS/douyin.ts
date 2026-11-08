@@ -136,11 +136,25 @@ export function signQuery (
   }
   if (extras?.appKey) signInput.appKey = extras.appKey
   const { sign, qs } = signQs(signInput)
-  const query: Record<string, string> = {
-    ...baseQuery,
-    sign,
-    qs,
-  }
+  return finish({ ...baseQuery, sign, qs }, extras)
+}
+
+/**
+ * 重放已签名的请求:官方验证完成后的重试只补 fp 与验证字段，
+ * ts/sign/qs 沿用失败那一轮；重算签名会被服务端当成新一轮请求而触发频控
+ */
+export function resumeQuery (
+  signed: Record<string, string>,
+  extras?: SignExtras,
+): SignedQuery {
+  const query = { ...signed }
+  // a_bogus 覆盖 query+body，必须按重放后的参数重算
+  delete query.a_bogus
+  return finish(query, extras)
+}
+
+function finish (base: Record<string, string>, extras?: SignExtras): SignedQuery {
+  const query: Record<string, string> = { ...base }
   if (extras?.msToken) {
     query.msToken = extras.msToken
   }

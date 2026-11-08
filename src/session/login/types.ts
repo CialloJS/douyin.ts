@@ -116,8 +116,12 @@ export interface Challenge {
   common_params?: Record<string, unknown>
 }
 
-/** check_qrconnect 轮询结果:响应体与响应头验证决策 */
+/** check_qrconnect 轮询结果:响应体、成功标记、响应头验证决策与可重放签名 */
 export interface CheckResult {
   data: CheckData
+  /** envelope 的 message:成功判定只看它,data.error_code 可能仍是 0 */
+  message: string
   decision: string | undefined
+  /** 去掉每轮重算的 msToken/a_bogus 后的签名参数,验证完成后原样重放 */
+  signed: Record<string, string>
 }

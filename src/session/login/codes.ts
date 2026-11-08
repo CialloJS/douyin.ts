@@ -3,7 +3,10 @@ export const tag = 'login'
 
 /** 轮询节奏与请求超时(协议节奏,勿随意改) */
 export const time = {
-  poll: 1100,
+  /** 基准间隔;外层轮数到 60/180 后递增到 mid/max,与官方客户端一致避开频控 */
+  poll: 1000,
+  pollMid: 3000,
+  pollMax: 5000,
   timeout: 120_000,
   upPoll: 3000,
   upTimeout: 180_000,
@@ -37,9 +40,9 @@ export const path = {
 export const ec = {
   tooFrequent: 7,
   appVerify: 2046,
-  /** 验证中心风控/滑块兜底码 */
-  risk: 1105,
   verifyLimit: 3,
+  /** 频控退避重试上限:提示「稍后再试」说明是暂时性的,退避后仍有成功机会 */
+  frequentLimit: 3,
 } as const
 
 export const st = {
