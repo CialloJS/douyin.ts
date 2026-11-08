@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.9](https://github.com/CialloJS/douyin.ts/compare/v0.6.8...v0.6.9) (2026-11-05)
+
+
+### Features
+
+* **docs:** 侧边栏导航改用官方组件 ([fdbd579](https://github.com/CialloJS/douyin.ts/commit/fdbd5797b93017b6fc4a2af3729152f2c072a0ef))
+
 ## [0.6.8](https://github.com/CialloJS/douyin.ts/compare/v0.6.7...v0.6.8) (2026-11-02)
 
 

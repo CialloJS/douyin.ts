@@ -1,6 +1,6 @@
 {
   "name": "douyin.ts",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "description": "抖音 Node SDK",
   "author": "CialloJS",
   "homepage": "https://github.com/CialloJS/douyin.ts#readme",
