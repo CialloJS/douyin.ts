@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.11](https://github.com/CialloJS/douyin.ts/compare/v0.6.10...v0.6.11) (2026-11-24)
+
+
+### Features
+
+* **app:** 新增 App 域完整实现，支持原生协议登录与消息收发 ([055c7a0](https://github.com/CialloJS/douyin.ts/commit/055c7a07394424dc46c9cac4dea47ce9e389d1cc))
+
 ## [0.6.10](https://github.com/CialloJS/douyin.ts/compare/v0.6.9...v0.6.10) (2026-11-08)
 
 
