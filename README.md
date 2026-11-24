@@ -4,7 +4,7 @@
 
 完整文档：<https://CialloJS.github.io/douyin.ts/>
 
-支持：扫码登录（含短信/密码/滑块等二次验证）、WS 收消息、HTTP 发消息、富媒体上传、表情、好友/群管理、会话状态与群事件。
+支持：扫码登录（含短信/密码/滑块等二次验证）、WS 收消息、HTTP 发消息、富媒体上传、表情、好友/群管理、会话状态与群事件；另提供独立 App 通道（设备注册、App 登录、原生 IM 收发与媒体上传）。
 
 ## 安装
 
@@ -54,6 +54,45 @@ const bot = new Bot(session)
 await bot.start()
 ```
 
+## App 通道
+
+`Bot` 走 web 协议，`App` 走 Android 原生协议（pb + Frontier 长连接），两者互不影响，可同时使用。
+
+```ts
+import { App } from 'douyin.ts'
+
+const app = new App({ cookie }) // ids 省略时自动注册设备
+
+app.on('message', async msg => {
+  // App 载荷没有 chatId，回复用消息自带的会话字段
+  await app.send({
+    conversationId: msg.conversationId,
+    shortId: msg.conversationShortId,
+    type: msg.conversationType,
+    body: { type: 'text', text: 'pong' },
+  })
+})
+
+await app.start()
+```
+
+App 通道发送图片/视频/文件时，`source` 可直接传本地路径、URL 或字节，SDK 会先上传再发送。凭证也可由 App 自己登录获得：
+
+```ts
+const login = new App({})
+const res = await login.qr({
+  onQr: qr => renderQr(qr.url),
+  onStatus: s => console.log(s),
+})
+
+if (res.ok) {
+  // res.cookie + res.ids 一起持久化，下次 new App({ cookie, ids }) 免登录
+  save(res.cookie, res.ids)
+}
+```
+
+更多见文档 [App 通道](https://CialloJS.github.io/douyin.ts/docs/app)、[App 消息](https://CialloJS.github.io/douyin.ts/docs/app/message)、[App 接口](https://CialloJS.github.io/douyin.ts/docs/app/api)。
+
 ## 消息模型
 
 `bot.on('message')` 的 `msg` 是平铺的消息体（`InboundMessage = PushMessage & RecvBody`），按 `msg.type` 判别：
@@ -66,6 +105,8 @@ await bot.start()
 | `unknown` | 未建模类型，原文在 `raw` |
 
 媒体消息的 `text` 只保留内容原生文案，无文案时为空字符串，不预填「[视频]」等占位；展示时按 `type` 自行处理。
+
+App 通道的载荷同型，但没有 `chatId` / `senderNickname`，回复时用 `conversationId` / `conversationShortId` / `conversationType`，见 [App 消息](https://CialloJS.github.io/douyin.ts/docs/app/message)。
 
 ```ts
 bot.on('message', async msg => {
@@ -128,6 +169,26 @@ await bot.msg.send(chatId, { image: img, text: '看这个' })
 await bot.msg.reply(chatId, msg, '收到')
 await bot.msg.recall(chatId, msg.serverMessageId)
 ```
+
+## App 接口（统一 `app.域.动作`）
+
+| 域 | 动作 |
+|----|------|
+| 登录与设备 | device / code / slide / sms / pwd / qr / mfa / info / token / record / key / im / ee |
+| 会话与消息 | convList / convInfo / history / read / send / createConv / participants / members / msg / msgs / byTime / mark / modifyExt / batchRead / batchDelete |
+| 账号与资料 | self / other / scene / userSettings / settings / socialSettings / socialCount / compliance / ban / forbid / dx / privacyImage |
+| 通知与好友 | noticeCount / noticeList / applies / recommend / topk / recommendCount / replyFriend |
+| 社交 | visitors / videoStats / voipColdPull / collectUsers / spotlight / familiar / userRecommend / localUsers |
+| 资源 | resources / emoji / emoticon / helloSticker / uploadConfig / collectFile / album / albumAdd |
+| 群 | groups / center / indicators / chains / groupNumber / updateGroup / visible / checkin / entryLimit / groupWords |
+| 配置与其他 | imConfig / globalConfig / strategyConfig / activeConfig / activeUpdate / enterChat / msgTabEnter / mergePrepare / expHit |
+
+返回值是 pb 解出的原始结构，int64（消息 id、游标、`shortId`）统一用字符串，完整方法表见 [App 接口](https://CialloJS.github.io/douyin.ts/docs/app/api)。
+
+## 已知限制
+
+- **合并转发未完成**：web 通道只能发出外层摘要卡；App 通道的 136 消息返回 `status=0` 但服务端不落库。抖音卡片只存 `msg_ids` 引用，点开按 id 拉原消息，因此只能伪造外层昵称/摘要/时间/顺序，无法伪造正文。
+- **短信登录 / 密码登录未完成**：`send_code` 需客户端加密；1105 滑块依赖本机 Edge/Chrome 且易判 `5014` 频控；2046 二次验证还需交互提供短信码或密码。当前请使用扫码登录。
 
 ## 错误模型
 
