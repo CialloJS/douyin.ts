@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.12](https://github.com/CialloJS/douyin.ts/compare/v0.6.11...v0.6.12) (2026-11-24)
+
+
+### Features
+
+* 添加表情回应功能及相关群接口 ([230c547](https://github.com/CialloJS/douyin.ts/commit/230c547967e37770f9102f62445d74065505211a))
+
 ## [0.6.11](https://github.com/CialloJS/douyin.ts/compare/v0.6.10...v0.6.11) (2026-11-24)
 
 
