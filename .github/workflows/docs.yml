@@ -10,16 +10,14 @@ permissions:
   pages: write
   id-token: write
 
+# 部署进行中不取消上一次：中断部署比多跑一轮更容易失败
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
@@ -35,6 +33,16 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: docs/out
+
+  # 必须与构建分成两个 job：上传后立刻部署会赶上 Pages 工件 API 尚未同步，
+  # 表现为「Found 0 artifact(s)」，产物其实已生成。
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
       - name: summary
