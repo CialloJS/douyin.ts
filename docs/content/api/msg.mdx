@@ -276,7 +276,7 @@ call(chatId: string, calleeUid: string): Promise<VoiceCallResult>
 // 作品分享：itemId 与 uid 须对应真实作品，服务端会据此重建卡片
 await bot.msg.send(chatId, { type: 'share', share: { itemId, uid, title: '标题' } })
 
-// 合并转发：节点里的发送者信息可自行填写
+// 合并转发（未完成，见下方说明）：节点里的发送者信息可自行填写
 await bot.msg.send(chatId, {
   type: 'forward',
   nodes: [{ uid, nickname: '昵称', text: '内容', msgType: 7, aweType: 700, msgId }],
@@ -289,6 +289,14 @@ await bot.msg.send(chatId, { type: 'emoji', emoji: '1687263281313-ts-e7bbade781a
 <Warn>
 `bot.media.emojiList()` 下发的是 `tos-cn` 表态域资源，发 lite_emoji 会被服务端标记为仅发送者可见；发送表情消息请用 `bot.sticker.trending()` 的直链。
 </Warn>
+
+## 合并转发（未完成）
+
+`forward` 的收发结构已接通，但发送侧尚未完成，暂时不要依赖：
+
+- web 通道：`merge_msg_card/prepare` 返回 `status 4`，SDK 只能直接发出外层摘要卡，接收端点开为空。
+- App 通道：136 消息实测返回 `status=0`，但服务端不落库——同一会话内 58 / 110 / 150 等卡片都能通过 `app.history` 回读，唯独 136 查不到，说明 App pb 发送还缺字段，需要真机「多选 → 合并转发」的完整抓包对照补齐。
+- 节点里的昵称、文本、时间与顺序可以自行伪造；但抖音卡片只存 `msg_ids` 引用，点开后按 id 拉原消息，所以无法像 NapCat 那样伪造正文。缺省 `msgId` 时 SDK 用伪 id 占位，仅外层摘要可见。
 
 ## 错误
 

@@ -26,6 +26,7 @@ import { Social } from './social.js'
 import { Watch } from './watch.js'
 import { Notice } from './notice.js'
 import { Setting } from './setting.js'
+import { App } from '../app/index.js'
 import type { BotEventMap, BotOpts, Device, InboundMessage, Log } from '../types.js'
 
 export class Bot extends Emitter<BotEventMap> {
@@ -40,6 +41,7 @@ export class Bot extends Emitter<BotEventMap> {
   readonly watch = new Watch(this)
   readonly notice = new Notice(this)
   readonly setting = new Setting(this)
+  readonly app: App
 
   private readonly opts: BotOpts
   private readonly log: Log
@@ -52,6 +54,7 @@ export class Bot extends Emitter<BotEventMap> {
     super()
     this.opts = opts
     this.log = opts.log ?? createLog({ tag: 'bot' })
+    this.app = new App({ cookie: opts.cookie, log: this.log, ...opts.app })
   }
 
   /** 自身数字 uid（start 后可用） */

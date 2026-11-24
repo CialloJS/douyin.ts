@@ -162,7 +162,7 @@ function requestOf (value: Record<string, unknown> | undefined): FriendRequestIn
   }
 }
 
-/** cmd=20481 好友申请列表 */
+/** cmd=2048 好友申请列表 */
 export async function getFriendRequests (
   ctx: InboxContext,
   options: { status?: FriendRequestStatus } = {},
@@ -171,7 +171,7 @@ export async function getFriendRequests (
   let cursor = '0'
   for (;;) {
     const decoded = await ctx.transport.sendCookieProto(
-      20481,
+      2048,
       0,
       '/v1/friend/get_receive_apply_list',
       {

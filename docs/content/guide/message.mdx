@@ -101,7 +101,7 @@ bot.on('message', async msg => {
 | `file` | ✓ | ✓ | 文件 |
 | `share` | ✓ | ✓ | 作品分享卡片 |
 | `userCard` | ✓ | ✓ | 用户名片 |
-| `forward` | ✓ | ✓ | 合并转发 |
+| `forward` | ✓ | 受限 | 合并转发，发送未完成 |
 | `emoji` | ✓ | ✓ | 表情消息或小表情 |
 | `card` | ✓ | ✓ | 互动卡片，可原样回传 |
 | `groupCard` | ✓ | ✓ | 群邀请卡 |
@@ -112,6 +112,10 @@ bot.on('message', async msg => {
 | `unknown` | ✓ | ✗ | 未识别类型，保留 `raw` |
 
 发送侧不支持的类型会抛 `SdkError`，`data` 中的 `type` 指明是哪一种。
+
+<Warn>
+`forward`（合并转发）发送尚未完成：web 通道只能发出摘要卡；App 通道返回成功但服务端不落库。细节见 [msg · 合并转发](/docs/api/msg)。
+</Warn>
 
 ## 发送消息
 

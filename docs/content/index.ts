@@ -25,4 +25,8 @@ export const content: Record<string, () => Promise<{ default: ComponentType }>> 
   'api/watch': () => import('./api/watch.mdx'),
   'api/notice': () => import('./api/notice.mdx'),
   'api/setting': () => import('./api/setting.mdx'),
+  app: () => import('./app/index.mdx'),
+  'app/message': () => import('./app/message.mdx'),
+  'app/events': () => import('./app/events.mdx'),
+  'app/api': () => import('./app/api.mdx'),
 }

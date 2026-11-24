@@ -69,12 +69,12 @@ export async function listCookieThreads (
   return dedupeThreads(threads)
 }
 
-/** cmd=2047, /v1/message/get_recent_stranger_message — 陌生人消息（Desktop Cookie 通道；接口无分页字段） */
+/** cmd=12047, /v1/message/get_recent_stranger_message — 陌生人消息（Desktop Cookie 通道；接口无分页字段） */
 export async function listStrangerThreads (
   ctx: InboxContext,
 ): Promise<PrivateThread[]> {
   const decoded = await ctx.transport.sendCookieProto(
-    2047,
+    12047,
     1,
     '/v1/message/get_recent_stranger_message',
     {

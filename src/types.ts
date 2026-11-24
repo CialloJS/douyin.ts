@@ -2,6 +2,7 @@
 import type { Http } from './session/http.js'
 import type { ProtoTransport } from './live/transport.js'
 import type { WsCloseEvent, WsReconnectEvent } from './live/ws.js'
+import type { AppOpts } from './app/types.js'
 export type { WsCloseEvent, WsReconnectEvent } from './live/ws.js'
 
 export interface Log {
@@ -70,6 +71,8 @@ export interface BotOpts {
    * 从上次 `bot.device` / `login()` 返回的 session.device 落盘复用即可。
    */
   device?: Device
+  /** App 域（扫码/短信登录、设备注册、IM）选项 */
+  app?: AppOpts
   log?: Log
 }
 
@@ -686,8 +689,11 @@ export interface ForwardNode {
   msgType: number
   /** 节点 aweType（700 文本 / 2702 图片 …） */
   aweType: number
-  /** 节点消息 id */
-  msgId: string
+  /**
+   * 节点消息 id（原消息 serverMessageId）。
+   * 缺省即客户端伪造摘要：不注册云端记录，接收端点开无原文，仅外层昵称/文本可见。
+   */
+  msgId?: string
   /** 发送者 secUid（如有） */
   secUid?: string
   /** 节点发送时间 ms */

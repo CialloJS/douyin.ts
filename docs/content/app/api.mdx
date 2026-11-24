@@ -1,0 +1,221 @@
+import { Note } from '@/components/mdx/callout'
+
+# App 接口
+
+App 通道的方法都挂在 `app` 上，命名沿用「域 + 动作」的短动词形式。除登录相关方法外，返回值统一是服务端原始结构（`Record<string, unknown>`），字段与 Android 客户端一致。
+
+<Note>
+App 接口依赖 `X-Tt-Token` 等登录态。未登录时只有 `device()`、`code()`、`slide()`、`sms()`、`pwd()`、`qr()`、`mfa()` 可用。
+</Note>
+
+## 会话参数
+
+凡涉及会话的方法都接收同一组 `ConvId` 字段：
+
+| 字段 | 说明 |
+|------|------|
+| `conversationId` | 会话字符串 id，可在收侧消息上直接取 |
+| `shortId` | int64 会话短 id，用字符串或数字传；合并转发必填 |
+| `type` | `1` 单聊 / `2` 群聊 |
+
+所有 int64（消息 id、游标、`shortId`）都用字符串传递，避免超过 `Number.MAX_SAFE_INTEGER` 后精度丢失。消息收发、媒体上传与合并转发限制见 [App 消息](/docs/app/message)。
+
+## 登录与设备
+
+| 方法 | 用途 |
+|------|------|
+| `device(opts?)` | 注册并激活设备，返回 `Ids` |
+| `code(mobile)` | 只发送验证码，1105 时返回 `captcha` |
+| `slide(opts?)` | 为当前滑块挑战起本地验证页 |
+| `sms(opts)` | 短信验证码登录（含滑块与二次验证；未完成） |
+| `pwd(opts)` | 密码登录（未完成） |
+| `qr(opts?)` | 扫码登录（自动换码、合并会话） |
+| `mfa(kind, input?)` | 手动提交二次验证：`sms` / `password` / `upsms` / `qr` |
+| `info()` | 账号信息 |
+| `token()` | 当前 Cookie 与 uid |
+| `record(status)` | 开启/关闭「保存登录信息」 |
+| `key()` | keyhub 握手得到的 IM 密钥 |
+| `im(call?)` | 直接调用 IM 加密 pb 接口 |
+| `ee(id?)` | 导出 ee.info 96B key 包 |
+
+## 会话与消息
+
+| 方法 | 用途 |
+|------|------|
+| `convList(opts?)` | 会话列表（pb cmd=2006） |
+| `convInfos(list)` | 批量会话详情（pb cmd=610） |
+| `convInfo(id)` | 单个会话详情（pb cmd=608） |
+| `history(opts)` | 历史消息（pb cmd=301） |
+| `read(opts)` | 标记已读（pb cmd=2002） |
+| `readIndex(id)` | 成员已读游标（pb cmd=2000） |
+| `minIndex(id)` | 最小同步游标（pb cmd=2001） |
+| `participantsReadIndex(id)` | 参与者已读游标 |
+| `userMessage(opts?)` | 用户维度消息 |
+| `send(opts)` | 发送消息（类型与媒体见 [App 消息](/docs/app/message)） |
+| `createConv(opts)` | 创建会话 |
+| `strangerList(opts?)` | 陌生人会话列表 |
+| `auditList(opts?)` | 待审核会话 |
+| `recentStranger(opts?)` | 最近陌生人 |
+| `participants(opts?)` | 会话参与者分页（pb cmd=605） |
+| `members(opts?)` | 会话成员列表（pb cmd=12060） |
+| `membersBatch(list)` | 批量取多个会话成员（pb cmd=12061） |
+| `membersByUid(id, users)` | 按 uid 精确取成员（pb cmd=654） |
+| `marks(opts?)` | 按标记位增量拉消息（pb cmd=2037） |
+| `cmds(opts?)` | 最近控制类消息会话（pb cmd=12062） |
+| `cmdMessages(opts?)` | 会话内控制类消息（pb cmd=2040） |
+| `msg(id, messageId, onlyStatus?)` | 按服务端消息 id 取单条（pb cmd=211） |
+| `msgs(id, messageIds)` | 按服务端消息 id 批量取（pb cmd=212） |
+| `byTime(opts?)` | 按时间翻页取消息（pb cmd=310） |
+| `mark(opts)` | 消息标记/取消标记（pb cmd=2036） |
+| `modifyExt(opts)` | 修改消息扩展与内容（pb cmd=2021） |
+| `cmdRange(opts?)` | 控制类消息区间（pb cmd=12040） |
+| `specified(opts)` | 指定类型消息列表（pb cmd=12050） |
+| `favorite(opts?)` | 收藏会话列表（pb cmd=611） |
+| `top(opts?)` | 置顶会话列表（pb cmd=612） |
+| `batchRead(list)` | 批量标记已读（pb cmd=613） |
+| `batchDelete(list)` | 批量删除会话（pb cmd=619） |
+| `clearMsg(opts)` | 清空会话消息（pb cmd=620） |
+| `recentStrangerConv(opts?)` | 最近陌生人会话（pb cmd=12063） |
+| `threadSub(opts)` | 盖楼订阅状态（pb cmd=2205） |
+| `msgRange(opts)` | 会话内 v2 索引区间消息（pb cmd=2041） |
+| `msgInit(opts?)` | 冷启动首屏消息（pb cmd=2043） |
+| `threadInit(opts?)` | 盖楼消息冷启动（pb cmd=2204） |
+| `floatingCheck(query?)` | 会话悬浮条是否展示 |
+| `floatingConfigs(query?)` | 会话悬浮条配置 |
+| `backgrounds(query?)` | 默认聊天背景图 |
+| `convScene(query?)` | 会话场景信息 |
+| `convOther(body)` | 会话附加信息 |
+| `openApps(body)` | 会话可打开应用列表 |
+
+## 账号与资料
+
+| 方法 | 用途 |
+|------|------|
+| `self(query?)` | 本人主页 |
+| `other(secUserId, query?)` | 他人主页 |
+| `scene(query?)` | 主页场景配置 |
+| `userSettings(query?)` | 用户设置 |
+| `settings(query?)` | 通用设置 |
+| `socialSettings(query?)` | 社交设置 |
+| `socialCount(body)` | 社交计数 |
+| `compliance(query?)` | 合规设置 |
+| `ban(query?)` | 封禁信息 |
+| `forbid(query?)` | 紧急禁用状态 |
+| `dx(query?)` | 设备风险信息 |
+| `syncTips(query?)` | 资料同步提示 |
+| `privacyImage(query?)` | 隐私图片 |
+
+## 通知与好友
+
+| 方法 | 用途 |
+|------|------|
+| `noticeCount(query?)` | 通知未读数 |
+| `noticeList(query?)` | 通知列表 |
+| `applies(opts?)` | 收到的好友申请（pb cmd=2048） |
+| `recommend(query?)` | 好友推荐 |
+| `topk(query?)` | 推荐候选 topK |
+| `recommendCount(query?)` | 新推荐用户数量 |
+| `replyFriend(uids, attitude)` | 处理好友申请，`1` 同意 / `2` 拒绝 |
+
+## 社交
+
+| 方法 | 用途 |
+|------|------|
+| `visitors(query?)` | 熟人视频访客列表 |
+| `videoStats(body)` | 熟人视频统计上报 |
+| `voipColdPull(query?)` | VoIP 冷启动拉取 |
+| `collectUsers(query?)` | 收藏的用户列表 |
+| `spotlight(query?)` | 关注关系推荐 |
+| `familiar(query?)` | 熟人设置 |
+| `userRecommend(body)` | 用户推荐 |
+| `localUsers(query?)` | 本地通讯录用户 |
+
+## 资源
+
+| 方法 | 用途 |
+|------|------|
+| `resources(query?)` | 资源位聚合 |
+| `emoji(query?)` | 表情资源 |
+| `emoticon(query?)` | 表情搜索 |
+| `helloSticker(query?)` | 打招呼贴纸 |
+| `uploadConfig(query?)` | 上传通道配置 |
+| `collectFile(query?)` | 收藏文件 |
+| `album(query?)` | 好友相册列表 |
+| `albumAdd(body)` | 批量加入好友相册 |
+
+## 群
+
+| 方法 | 用途 |
+|------|------|
+| `groups(query?)` | 群列表 |
+| `center(body)` | 群中心 |
+| `centerPlan(body)` | 群中心方案 |
+| `centerSync(body)` | 群中心同步 |
+| `centerMsgs(body)` | 群中心消息 |
+| `indicators(body)` | 群指标 |
+| `chains(body)` | 群关系链 |
+| `chain(body)` | 按群 id 取关系链 |
+| `checkin(body)` | 群打卡信息 |
+| `checkinAuth(body)` | 群打卡权限校验 |
+| `memberSettings(body)` | 群成员设置 |
+| `groupScan(query?)` | 扫码入群信息 |
+| `groupTags(query?)` | 群标签 |
+| `active(body)` | 群活跃上报 |
+| `activeScan(query?)` | 活跃扫码信息 |
+| `groupNumber(shortId)` | 群号查询 |
+| `updateGroup(body)` | 更新群资料 |
+| `visible(body)` | 群可见性 |
+| `mixPhoto(query?)` | 群合照样式 |
+| `validate(query?)` | 群资料校验 |
+| `upgrade(query?)` | 群升级信息 |
+| `upgrades(query?)` | 群升级信息列表 |
+| `foldGroups(query?)` | 推荐折叠群 |
+| `groupTasks(query?)` | 群任务列表 |
+| `groupTaskUpdate(body)` | 群任务更新 |
+| `groupMultiCheck(body)` | 群操作批量校验 |
+| `entryLimit(query?)` | 入群门槛设置 |
+| `groupWords(query?)` | 群聊词库设置 |
+
+## 配置
+
+| 方法 | 用途 |
+|------|------|
+| `imConfig(query?)` | 客户端 IM 配置 |
+| `globalConfig(query?)` | 服务端全局配置 |
+| `strategyConfig(query?)` | 策略配置 |
+| `rebootConfig(query?)` | 重启降级配置 |
+| `activeConfig(query?)` | 用户活跃配置 |
+| `activeUpdate(query?)` | 用户活跃心跳更新 |
+| `activeStatus(body)` | 上报用户活跃状态 |
+| `enterChat(body)` | 进入会话上报 |
+| `msgTabEnter(body)` | 进入消息 Tab 上报 |
+
+## 成长与互动
+
+| 方法 | 用途 |
+|------|------|
+| `consecutive(query?)` | 连续聊天关系成就 |
+| `growthShare(body)` | 成长分享列表 |
+| `consecutiveSwitch(body)` | 连续聊天开关 |
+| `consecutiveReport(body)` | 连续聊天上报 |
+| `growthDynamic(body)` | 动态策略 |
+| `audioModel(query?)` | 语音识别模型配置 |
+| `flame(query?)` | 火焰成就 |
+| `gaga(body)` | Gaga 聚合信息 |
+| `pet(body)` | 宠物聚合信息 |
+| `petCard(query?)` | 宠物精灵邀请卡 |
+| `bullet(body)` | 子弹事件请求并更新 |
+| `bulletSubmit(body)` | 子弹事件数据提交 |
+
+## 其他
+
+| 方法 | 用途 |
+|------|------|
+| `expHit(body)` | 实验命中查询 |
+| `mergePrepare(body)` | 合并消息卡准备（136 发送未完成，见 [msg](/docs/api/msg)） |
+| `commMisc(body)` | 通信杂项上报 |
+| `shareReport(body)` | 分享上报 |
+
+<Note>
+多数接口的参数是服务端原样 query / body，方法签名只约束必填身份字段。参数名和响应字段以 Android 40.5.0 的抓包与反编译结果为准。
+</Note>

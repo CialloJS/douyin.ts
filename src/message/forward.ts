@@ -22,9 +22,43 @@ function nodeMessageType (message: Array<{ type: string }>): { msgType: number; 
 }
 
 /** JSON 序列化：BigInt 输出为裸数字（uid/msg_id 等 19 位大整数超出 Number 精度，服务端按数字解析） */
-function rawJson (value: unknown): string {
-  return JSON.stringify(value, (_, v) => (typeof v === 'bigint' ? `\u0000${v}\u0000` : v))
-    .replace(/"\u0000(-?\d+)\u0000"/g, '$1')
+export function rawJson (value: unknown): string {
+  return JSON.stringify(value, (_, v) => (typeof v === 'bigint' ? `@@${v}@@` : v))
+    .replace(/"@@(-?\d+)@@"/g, '$1')
+}
+
+/** 合并转发 content：list_content 摘要 + msg_ids 引用，19 位 id 以裸数字写入；缺 msgId 的节点用伪 id 占位 */
+export function mergeContent (nodes: ForwardNode[], shortId: string | number, title?: string): string {
+  const timestamp = Date.now()
+  // 伪造节点没有真实消息可引用，按发送时间合成递增 id，保证 list_content 与 msg_ids 对得上
+  const ids = nodes.map((node, i) => node.msgId !== undefined ? BigInt(node.msgId) : BigInt(timestamp) * 1000n + BigInt(i))
+  const listContent = nodes.map((node, i) => ({
+    msgid: ids[i],
+    nick_name: node.nickname,
+    text: node.text,
+  }))
+  const msgIds = nodes.map((node, i) => ({
+    msg_id: ids[i],
+    msg_type: node.msgType,
+    awe_type: node.aweType,
+    show_flag: true,
+    uid: BigInt(node.uid),
+    ...(node.secUid ? { sec_uid: node.secUid } : {}),
+    create_time: node.createTime ?? timestamp,
+    ref_msg_invisible: 0,
+  }))
+  return rawJson({
+    list_content: listContent,
+    msg_ids: msgIds,
+    // 新版合并卡片（v2）标记：缺失时 prepare 只回 v1 内容，App 发送会被判不支持
+    new_mr_share_version: 2,
+    origin_conv_id: BigInt(shortId),
+    title: title ?? `${nodes[0]?.nickname ?? ''} 的聊天记录`,
+    createdAt: 0,
+    is_card: false,
+    msgHint: '',
+    aweType: 13600,
+  })
 }
 
 /**
@@ -38,28 +72,7 @@ export async function sendMergeForward (
   options: SendForwardOptions,
 ): Promise<SendMessageResponse> {
   if (!options.nodes.length) return err({ nodes: options.nodes })
-  const timestamp = Date.now()
-  const listContent = options.nodes.map(node => ({
-    msgid: BigInt(node.msgId),
-    nick_name: node.nickname,
-    text: node.text,
-  }))
-  const msgIds = options.nodes.map(node => ({
-    msg_id: BigInt(node.msgId),
-    msg_type: node.msgType,
-    awe_type: node.aweType,
-    show_flag: true,
-    uid: BigInt(node.uid),
-    ...(node.secUid ? { sec_uid: node.secUid } : {}),
-    create_time: node.createTime ?? timestamp,
-    ref_msg_invisible: 0,
-  }))
-  const content = rawJson({
-    list_content: listContent,
-    msg_ids: msgIds,
-    origin_conv_id: BigInt(options.conversationShortId),
-    title: `${options.nodes[0]?.nickname ?? ''} 的聊天记录`,
-  })
+  const content = mergeContent(options.nodes, options.conversationShortId)
   return send(ctx, { ...options, content, messageType: 136 })
 }
 

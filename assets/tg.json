@@ -1,0 +1,13 @@
+{
+  "ree_private_key": "3A70A9AA8F8864E8834D2580C65A346096BCE64B5CAFD21FC9203ABD9AC57EE4",
+  "ecdh_key": "spY2ycLg4Ewx/2+e1I25GByAXUhdq2t7mcLnk+01nuk=",
+  "display_os_version": "PLC110_16.0.10.500(CN01)",
+  "tee": {
+    "pub_key": "BOfkarREWP85PstvqZ4qxvuhAOneTkhB2zuACqDhYzAPrrBnUs9y5OSeFIBshACrN855xYnWFuZlRk27sXi+0FA=",
+    "private_key_path": "tg.pem",
+    "sec_ts": "#j/vCjnotZgpvw0B/8xXOaTDBg+Qtbgeej6+qt4HiLllcNQR/cMhuwMD3PKjj",
+    "server_time": 1794340091000,
+    "server_cert_sn": "533240336124694022040808462028007165443034493949"
+  },
+  "tickets": {}
+}

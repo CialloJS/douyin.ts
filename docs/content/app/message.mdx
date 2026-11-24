@@ -1,0 +1,160 @@
+import { Note, Tip, Warn } from '@/components/mdx/callout'
+
+# App 消息
+
+App 通道收发与 web 通道共用同一套统一消息体 `MsgBody`，但传输、上传与能力边界不同：
+
+| 项目 | web（`bot.msg`） | App（`app.send`） |
+|------|------------------|-------------------|
+| 会话标识 | `chatId` 字符串 | `conversationId` + `shortId` + `type` |
+| 媒体上传 | 网关代传 | 发送前走 Cookie 通道上传 |
+| 文件类型 | `6` | `150`（aweType `15001`） |
+| 表情 | 支持小表情 id / im-resource | 仅完整 `http(s)` 直链 |
+| 合并转发 | 摘要卡 | 受限，见下方说明 |
+
+接收事件载荷是 `InboundMessage`（`PushMessage & RecvBody`），没有 `chatId`，回复时直接用消息里带的会话字段。
+
+## 会话标识
+
+`app.send()` 的会话参数沿用 `ConvId`：
+
+| 字段 | 说明 |
+|------|------|
+| `conversationId` | 字符串会话 id |
+| `shortId` | int64 会话短 id，用字符串传避免精度丢失；合并转发必填 |
+| `type` | `1` 单聊 / `2` 群聊 |
+
+收侧消息里的 `conversationId`、`conversationShortId`、`conversationType` 与这三个字段一一对应，可直接回传。
+
+## 接收
+
+```ts
+app.on('message', async msg => {
+  console.log(msg.conversationId, msg.type, msg.text)
+
+  if (msg.text === 'ping') {
+    await app.send({
+      conversationId: msg.conversationId,
+      shortId: msg.conversationShortId,
+      type: msg.conversationType,
+      body: { type: 'text', text: 'pong' },
+    })
+  }
+})
+```
+
+常用字段：
+
+| 字段 | 说明 |
+|------|------|
+| `type` | 消息体判别（`text` / `image` / `video` / …） |
+| `text` | 展示文本，所有类型都有 |
+| `ats` / `atAll` | @ 提及列表 / 是否 @所有人 |
+| `image` / `video` / `file` … | 媒体资源（收侧恒为资产形态，可直接回传） |
+| `conversationId` / `conversationShortId` / `conversationType` | 会话标识 |
+| `senderUid` / `senderSecUid` | 发送者 |
+| `serverMessageId` | 服务端消息 id |
+| `createTime` | 秒级时间戳字符串 |
+| `raw` | 原始推送 |
+
+自发消息默认不会下发；编辑重推走 `message:edited`。完整事件列表与分流规则见 [App 事件](/docs/app/events)。
+
+## 发送
+
+```ts
+const res = await app.send({
+  conversationId,
+  shortId,
+  type: 1,
+  body: { type: 'text', text: '你好' },
+})
+```
+
+| 选项 | 说明 |
+|------|------|
+| `body` | 统一消息体，给定后自动推导 `messageType` 与 `content` |
+| `content` / `messageType` | 高级用法：直接给原始内容与类型 |
+| `clientMessageId` | 客户端消息 id，用于去重/回执关联 |
+| `mentionedUsers` | 额外 @ 的 uid 列表 |
+| `threadId` | 盖楼回复的楼层 id |
+| `ref` | 引用回复：`{ id, hint, rootId, rootIndex }` |
+| `ext` | 扩展键值 |
+
+返回值是服务端原始结构，核心在 `sendMessage`：
+
+```ts
+{ sendMessage: { serverMessageId: '…', status: 0, checkCode: '0' } }
+```
+
+`status !== 0` 表示服务端拒绝，原因在 `checkMessage` 中，例如 `8501` 对应「暂不支持发送该类型消息」。
+
+## 消息类型
+
+| `body.type` | messageType | App 备注 |
+|-------------|-------------|----------|
+| `text` | `7` | 支持 `ats` / `atAll` |
+| `image` | `27` | 可传输入源，自动上传 |
+| `video` | `30` | 可传输入源；自动探测宽高、缺省抽帧封面 |
+| `file` | `150` | 可传输入源；web 的 `6` 在 App 会被判不支持 |
+| `share` | `8` | 分享卡片 |
+| `userCard` | `25` | 个人名片 |
+| `card` | `110` | 互动卡，原样回传 `patch` 与 `sign` |
+| `groupCard` | `58` | 群名片 |
+| `location` | `502` | 位置卡片 |
+| `emoji` | `5` | 仅接受完整 `http(s)` 资源直链 |
+| `forward` | `136` | 合并转发，受限，见下 |
+
+`audio`、`link`、`chains`、`unknown` 在 App 通道尚未支持，发送会抛 `SdkError`。
+
+## 媒体
+
+`image` / `video` / `file` 都支持三种写法：
+
+```ts
+// 输入源：URL、本地路径、Base64 字符串或原始字节，发送前自动上传
+await app.send({ conversationId, shortId, body: { type: 'image', image: './a.png' } })
+await app.send({ conversationId, shortId, body: { type: 'video', video: { source: 'https://…/v.mp4' } } })
+await app.send({ conversationId, shortId, body: { type: 'file', file: { source: './a.pdf', name: '报表.pdf' } } })
+
+// 预上传资产：自行上传后直接发送
+await app.send({ conversationId, shortId, body: { type: 'file', file: { asset } } })
+```
+
+<Tip>
+视频未给 `poster` 时会自动抽一帧作为封面；上传复用当前登录 Cookie，token 轮换后无需重建实例。
+</Tip>
+
+## 合并转发（未完成）
+
+```ts
+await app.send({
+  conversationId,
+  shortId,
+  body: {
+    type: 'forward',
+    nodes: [{ uid, nickname: '昵称', text: '内容', msgType: 7, aweType: 700, msgId }],
+  },
+})
+```
+
+- 真实节点（带 `msgId`）会先调 `mergePrepare` 注册原消息，再把 `verified_content` 作为 136 内容发出。
+- 任一节点缺省 `msgId` 时跳过注册，SDK 用伪 id 直接发摘要卡。
+- 当前 136 实测返回 `status=0` 但服务端不落库，`app.history` 查不到；同一会话的 58 / 110 / 150 都能回读，说明发送还缺字段。
+- 抖音卡片只存 `msg_ids` 引用，点开后按 id 拉原消息，因此只能伪造外层昵称/摘要/时间/顺序，无法伪造正文。详见 [msg · 合并转发](/docs/api/msg)。
+
+## 拉历史
+
+```ts
+const page = await app.history({
+  conversationId,
+  shortId,
+  type: 1,
+  limit: 20,
+})
+```
+
+`history()`、`read()`、`msg()`、`msgs()` 等会话方法都接收同一组会话字段，参数与命令号见 [App 接口](/docs/app/api)。返回值是 pb 解出的原始结构，字段名与 Android 客户端一致。
+
+<Note>
+所有 int64 字段（`shortId`、消息 id、游标）都用字符串传递，避免超过 `Number.MAX_SAFE_INTEGER` 后精度丢失。
+</Note>

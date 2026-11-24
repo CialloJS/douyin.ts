@@ -1,0 +1,72 @@
+import { Note } from '@/components/mdx/callout'
+
+# App 事件
+
+`app.on(event, fn)` 与 `bot.on(event, fn)` 使用同一套事件名（`ImEventMap`），但数据来源是独立的 App Frontier 长连接，与 `Bot` 的 web 长连接互不影响。
+
+## 启动与关闭
+
+```ts
+const app = new App({ ids, cookie })
+
+app.on('message', msg => {
+  console.log(msg.conversationId, msg.text)
+})
+
+await app.start()   // 建立长连接
+app.stop()          // 关闭并停止重连
+app.connected       // 当前是否在线
+```
+
+<Note>
+`start()` 要求已完成登录：握手必须带 `X-Tt-Token`。未登录时连接会被服务端立即断开，`start()` 以错误拒绝。
+</Note>
+
+## 事件一览
+
+| 事件 | 载荷 | 说明 |
+|------|------|------|
+| `message` | `InboundMessage` | 新消息 |
+| `message:edited` | `InboundMessage` | 消息被编辑 |
+| `notice` | `NoticeEvent` | 会话/群/关系变更通知 |
+| `request` | `RequestEvent` | 好友申请、入群申请 |
+| `read` | `ReadEvent` | 单聊已读回执（`50013`） |
+| `status` | `StatusEvent` | 会话状态（`50001`） |
+| `voip` | `VoipCallEvent` | 语音来电（`50018`） |
+| `reconnecting` | `WsReconnectEvent` | 断开后准备重连 |
+| `close` | `WsCloseEvent` | 连接关闭 |
+
+载荷类型与 [Bot 事件](/docs/events/message) 相同，但 App 消息不带 `chatId`、`senderNickname` 这两个 web 侧附加字段：回复时改用 `conversationId` / `conversationShortId` / `conversationType`，见 [App 消息](/docs/app/message)。
+
+## 一致性处理
+
+App 推送与 web 推送共用 IM 协议，分发规则保持一致：
+
+- `50001` / `50013` / `50018` 先作为信令处理，不受自发过滤影响。
+- 带编辑信息的消息走 `message:edited`。
+- `1001` / `50011` 系统消息先走通知分流。
+- 盖楼根消息（`50002`）正文为空，不进 `message`。
+- 自发消息默认过滤；App 通道没有 `selfMessage` 开关。
+- 好友申请、入群申请走 `request`，其余通知走 `notice`。
+
+## 连接行为
+
+| 项目 | 行为 |
+|------|------|
+| 子协议 | `pbbp`（不是 web 的 `pbbp2`） |
+| 鉴权 | `X-Tt-Token` + Cookie；`access_key = md5(fpid + appKey + device_id + salt)` |
+| 服务过滤 | 只处理 `service` 为 `5` / `33554856` 且 `method = 1` 的帧 |
+| 压缩 | `payload_encoding = __lz4` 时先解 LZ4 block |
+| 回执 | 帧头 `need_ack=1` 时自动回 ack，不需要业务处理 |
+| 心跳 | 每 30 秒 ping 一次，与握手 query 的 `ping-interval` 一致 |
+| 退避 | 首次失败直接拒绝；建立过连接后断开按 1s、2s、4s… 封顶 30s 重连 |
+
+## 注意事项
+
+<Note>
+App 与 Bot 是两条独立连接。同时使用时要分别 `start()`，事件也分别注册；不要期待 `bot.app.on` 能收到 web 长连接的消息。
+</Note>
+
+- `close` 每次断开都会触发，包括随后会自动重连的情况。
+- `app.stop()` 后可以再次 `start()`，但必须保持有效登录态。
+- 回调异常不会被 SDK 捕获，建议在回调内自行 `try/catch`。

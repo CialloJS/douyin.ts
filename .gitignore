@@ -8,3 +8,4 @@ docs/out
 demo/session.json
 demo/qrcode.png
 docs/.next
+demo/app.json

@@ -24,6 +24,10 @@ export class Jar {
     this.store.delete(name)
   }
 
+  clear (): void {
+    this.store.clear()
+  }
+
   /** 导入 Cookie 请求头；响应 Set-Cookie 走 absorb 以支持过期删除 */
   merge (raw: string): void {
     for (const part of raw.split(/[;\n]/)) {

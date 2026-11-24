@@ -46,7 +46,7 @@ export class Chat {
     return getMinIndex(this.bot.ctx().inbox, toAddress(chatId))
   }
 
-  /** 按 uid 消息区间查询（cmd=2048，语义不完整返回原始结构） */
+  /** 按 uid 消息区间查询（cmd=12048，语义不完整返回原始结构） */
   userMessageStat (req: UserMessageQuery = {}): Promise<Record<string, unknown>> {
     return getUserMessage(this.bot.ctx().inbox, req)
   }

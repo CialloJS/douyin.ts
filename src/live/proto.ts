@@ -70,9 +70,9 @@ message RequestPayload {
   ConversationListRequest conversation_list = 2006;
   AckConversationApplyRequest ack_conversation_apply = 2025;
   GetConversationAuditListRequest get_conversation_audit_list = 2027;
-  GetFriendReceiveApplyListRequest get_friend_receive_apply_list = 20481;
+  GetFriendReceiveApplyListRequest get_friend_receive_apply_list = 2048;
   ReplyFriendApplyRequest reply_friend_apply = 2049;
-  GetRecentStrangerMessageReqBody get_recent_stranger_message = 2047;
+  GetRecentStrangerMessageReqBody get_recent_stranger_message = 12047;
   CreateVoipRequestBody create_voip = 2011;
   CallVoipRequestBody call_voip = 2012;
   // 以下对齐 native 客户端一并支持的查询/回执类接口：
@@ -81,8 +81,31 @@ message RequestPayload {
   GetReadIndexRequest get_read_index = 2000;
   GetMinIndexRequest get_min_index = 2001;
   ClientAckRequest client_ack = 2010;
-  GetUserMessageRequest get_user_message = 2048;
+  GetUserMessageRequest get_user_message = 12048;
   GetConversationParticipantsReadIndexRequest get_conversation_participants_read_index = 2038;
+  MgetConversationParticipantsRequest mget_conversation_participants_body = 654;
+  PullMarkMessageRequest pull_mark_message_body = 2037;
+  GetCmdMessageRequest get_cmd_message_body = 2040;
+  GetMessageRangeRequest get_message_info_by_index_v2_range_body = 2041;
+  MessageByInitRequest message_by_init = 2043;
+  ThreadMessageByInitRequest thread_message_by_init = 2204;
+  GetMessageByIdRequest get_message_by_id_body = 211;
+  GetMessagesByIdListRequest get_messages_by_server_id_list_body = 212;
+  GetConversationMessagesByTimeRequest get_conversation_messages_by_time_body = 310;
+  MarkMessageRequest mark_message_body = 2036;
+  ModifyMessageExtRequest modify_message_ext_body = 2021;
+  GetCmdMessageRangeRequest get_cmd_message_range_body = 12040;
+  GetSpecifiedMessageListRequest get_conversation_specified_message_list_body = 12050;
+  GetConversationInfoListByFavoriteRequest get_conversation_info_list_by_favorite_v2_body = 611;
+  GetConversationInfoListByTopRequest get_conversation_info_list_by_top_v2_body = 612;
+  BatchMarkConversationReadRequest batch_mark_read_body = 613;
+  BatchDeleteConversationRequest batch_delete_conversation_body = 619;
+  ClearConversationMessageRequest clear_conversation_message_v2_body = 620;
+  GetConversationMemberListRequest get_conversation_member_list_body = 12060;
+  BatchGetConversationMemberListRequest batch_get_conversation_member_list_body = 12061;
+  GetRecentCmdConvRequest get_recent_cmd_conv = 12062;
+  GetRecentStrangerConvRequest get_recent_stranger_conv = 12063;
+  UpdateThreadSubscribeStatusRequest update_thread_subscribe_status = 2205;
 }
 
 message GetConversationInfoV2Request {
@@ -448,18 +471,41 @@ message ResponsePayload {
   ConversationListResponse conversation_list = 2006;
   AckConversationApplyResponse ack_conversation_apply = 2025;
   GetConversationAuditListResponse get_conversation_audit_list = 2027;
-  GetFriendReceiveApplyListResponse get_friend_receive_apply_list = 20481;
+  GetFriendReceiveApplyListResponse get_friend_receive_apply_list = 2048;
   EmptyActionResponse reply_friend_apply = 2049;
-  GetRecentStrangerMessageRespBody get_recent_stranger_message = 2047;
+  GetRecentStrangerMessageRespBody get_recent_stranger_message = 12047;
   // stranger_list 实测服务端限流返回空 body，留空响应承接
   EmptyActionResponse stranger_conversation_list = 1000;
   GetReadIndexResponse get_read_index = 2000;
   GetMinIndexResponse get_min_index = 2001;
-  GetUserMessageResponse get_user_message = 2048;
+  GetUserMessageResponse get_user_message = 12048;
   // delete/leave/readIndex 服务端返回空 body，留空响应承接
   EmptyActionResponse delete_conversation = 603;
   EmptyActionResponse leave_conversation = 652;
   EmptyActionResponse get_conversation_participants_read_index = 2038;
+  MgetConversationParticipantsResponse mget_conversation_participants_body = 654;
+  PullMarkMessageResponse pull_mark_message_body = 2037;
+  GetCmdMessageResponse get_cmd_message_body = 2040;
+  GetMessageRangeResponse get_message_info_by_index_v2_range_body = 2041;
+  MessageByInitResponse message_by_init = 2043;
+  MessageByInitResponse thread_message_by_init = 2204;
+  GetMessageByIdResponse get_message_by_id_body = 211;
+  GetMessagesByIdListResponse get_messages_by_id_list_body = 212;
+  GetConversationMessagesByTimeResponse get_conversation_messages_by_time_body = 310;
+  MarkMessageResponse mark_message_body = 2036;
+  ModifyMessageExtResponse modify_message_ext_body = 2021;
+  GetCmdMessageRangeResponse get_cmd_message_range_body = 12040;
+  GetSpecifiedMessageListResponse conversation_specified_message_list_body = 12050;
+  ConversationListV2Response get_conversation_info_list_by_favorite_v2_body = 611;
+  ConversationListV2Response get_conversation_info_list_by_top_v2_body = 612;
+  EmptyActionResponse batch_mark_read_body = 613;
+  BatchDeleteConversationResponse batch_delete_conversation_body = 619;
+  ClearConversationMessageV2Response clear_conversation_message_v2_body = 620;
+  GetConversationMemberListResponse get_conversation_member_list_body = 12060;
+  BatchGetConversationMemberListResponse batch_get_conversation_member_list_body = 12061;
+  GetRecentCmdConvResponse get_recent_cmd_conv = 12062;
+  GetRecentStrangerConvResponse get_recent_stranger_conv = 12063;
+  UpdateThreadSubscribeStatusResponse update_thread_subscribe_status = 2205;
 }
 
 message GetRecentStrangerMessageReqBody {
@@ -475,9 +521,12 @@ message ConversationRecentMessage {
   int64 conversation_short_id = 1;
   repeated ConversationMessage messages = 2;
   int64 version = 3;
-  int32 badge_count = 4;
+  int64 badge_count = 4;
   string conversation_id = 5;
   repeated ConversationMessage ext_messages = 6;
+  int32 conversation_type = 11;
+  int64 parent_conv_short_id = 12;
+  int64 root_message_id = 14;
 }
 
 message GetRecentStrangerMessageRespBody {
@@ -870,34 +919,384 @@ message ClientAckRequest {
   int32 count = 7;
 }
 
-// cmd=2048 message/get_user_message —— 按 uid 区间拉消息游标/统计。
-// HAR 响应字段全 0，语义不完整，字段名按位置推测。
+// cmd=12048 message/get_user_message —— 增量拉会话/消息，同时下发 cmd 链路版本游标
 message GetUserMessageRequest {
-  int64 start_index = 1;
-  int64 message_type = 2;
-  int64 end_index = 4;
-  string cursor = 5;
+  int64 version = 1;
+  int64 cmd_index = 2;
+  int64 stranger_version = 3;
+  int64 read_version = 4;
+  string source = 5;
+  int64 consult_version = 6;
+  int64 notify_version = 17;
+  int64 thread_version = 19;
+  int64 thread_read_version = 20;
+  bool need_recent_conv_read_info = 21;
+  int64 cmd_message_chain_v2_index = 22;
 }
 
-message UserMessageItem {
-  int64 f1 = 1;
-  int64 f3 = 3;
-  message UserMessageItemExt {
-    int64 f1 = 1;
-    int64 f2 = 2;
-  }
-  UserMessageItemExt ext = 4;
+message GetRecentMsgVersionRange {
+  int64 left_side = 1;
+  int64 right_side = 2;
 }
 
-message UserMessageCount {
-  int64 f2 = 2;
-  int64 f3 = 3;
+message GetRecentMessageRespBody {
+  int64 next_conversation_version = 1;
+  repeated ConversationRecentMessage messages = 2;
+  bool has_more = 3;
+  GetRecentMsgVersionRange range = 4;
+}
+
+message GetCmdMessageChainV2RespBody {
+  repeated ConversationMessage messages = 1;
+  bool has_more = 2;
+  int64 next_cmd_message_chain_v2_index = 3;
 }
 
 message GetUserMessageResponse {
-  repeated UserMessageItem messages = 1;
-  UserMessageCount count = 2;
-  UserMessageCount total = 4;
+  GetRecentMessageRespBody messages = 1;
+  GetCmdMessageResponse cmd_messages = 2;
+  bool has_stranger_message = 3;
+  GetCmdMessageChainV2RespBody cmd_message_chain_v2 = 19;
+  int64 max_cmd_message_conv_version = 20;
+}
+
+// cmd=654 conversation/batch_get_member_list —— 按 uid 精确取成员，不必拉全量
+message MgetConversationParticipantsRequest {
+  string conversation_id = 1;
+  int64 conversation_short_id = 2;
+  int32 conversation_type = 3;
+  repeated int64 participants = 4;
+}
+
+message MgetConversationParticipantsResponse {
+  repeated ConversationParticipant participants = 1;
+}
+
+// cmd=2037 message/pull_mark —— 按标记位增量拉消息
+message PullMarkMessageRequest {
+  string conversation_id = 1;
+  int32 conversation_type = 2;
+  int64 conversation_short_id = 3;
+  int64 cursor = 4;
+  int64 limit = 5;
+  bool asc = 6;
+  int32 action_type = 7;
+  int64 tag = 8;
+  bool clear_unread_count = 9;
+}
+
+// 服务端字段顺序按参考 proto；消息体复用 ConversationMessage，隐藏字段解码时忽略
+message PullMarkMessageResponse {
+  repeated ConversationMessage messages = 1;
+  bool has_more = 2;
+  int64 next_cursor = 3;
+}
+
+// cmd=2040 conversation/get_recent_cmd_conv —— 拉取最近的控制类消息
+message GetCmdMessageRequest {
+  int64 cmd_index = 1;
+  string source = 2;
+  int32 new_user = 3;
+}
+
+message GetCmdMessageResponse {
+  repeated ConversationMessage messages = 1;
+  bool has_more = 2;
+  int64 next_cmd_index = 3;
+  int64 next_user_message_cursor = 4;
+  int64 readconv_version = 5;
+}
+
+// cmd=2041 message/get_message_by_index_v2_range —— 按会话内 v2 索引区间取消息
+message GetMessageRangeRequest {
+  string conversation_id = 1;
+  int32 conversation_type = 2;
+  int64 conversation_short_id = 3;
+  int64 min_index_in_conversation_v2 = 4;
+  int64 max_index_in_conversation_v2 = 5;
+  int32 direction = 6;
+}
+
+message MessageInfo {
+  int32 status = 1;
+  ConversationMessage body = 2;
+}
+
+message GetMessageRangeResponse {
+  repeated MessageInfo infos = 1;
+  int64 next_index_in_conversation_v2 = 2;
+  bool has_more = 3;
+}
+
+// cmd=2043 message/get_message_by_init —— 冷启动拉首屏消息
+message MessageByInitRequest {
+  int64 version = 1;
+  int32 page = 2;
+}
+
+// 包装层只保留会话标识，其余字段解码时忽略
+message InitConversation {
+  string conversation_id = 1;
+  int32 conversation_type = 2;
+}
+
+message InitConversationMessage {
+  InitConversation conversations = 1;
+  repeated ConversationMessage messages = 2;
+  InitThreadBubble thread_bubble_message = 3;
+}
+
+// 盖楼消息：消息体与普通消息同形，只多一个方向
+message InitThreadBubble {
+  repeated ConversationMessage bubble_messages = 3;
+  int32 message_direction = 4;
+}
+
+message MessageByInitResponse {
+  repeated InitConversationMessage messages = 1;
+  bool has_more = 2;
+  int64 next_init_version = 3;
+  int64 version = 4;
+  int64 user_cursor = 5;
+  int64 cmd_index = 6;
+  int64 readconv_version = 7;
+  int64 cmd_message_chain_v2_index = 8;
+  int64 cmd_message_conv_version = 9;
+}
+
+// cmd=2204 message/get_thread_message_by_init —— 盖楼消息冷启动
+message ThreadMessageByInitRequest {
+  int64 thread_version = 1;
+  int32 thread_limit = 2;
+  int32 msg_limit = 3;
+}
+
+// cmd=211 message/get_message_by_server_id —— 按服务端消息 id 取单条
+message GetMessageByIdRequest {
+  string conversation_id = 1;
+  int32 conversation_type = 2;
+  int64 conversation_short_id = 3;
+  int64 server_message_id = 4;
+  bool only_status = 5;
+}
+
+message GetMessageByIdResponse {
+  MessageInfo msg_info = 1;
+}
+
+// cmd=212 message/get_messages_by_server_id_list —— 批量取消息
+message GetMessagesByIdListRequest {
+  string conversation_id = 1;
+  int32 conversation_type = 2;
+  int64 conversation_short_id = 3;
+  repeated int64 server_message_id_list = 4;
+}
+
+message GetMessagesByIdListResponse {
+  repeated MessageInfo msg_info_list = 1;
+}
+
+// cmd=310 message/get_from_conversation_by_time —— 按时间正序翻页
+message GetConversationMessagesByTimeRequest {
+  int64 conv_short_id = 1;
+  int64 earliest_timestamp = 2;
+  int64 cursor = 3;
+  int64 limit = 4;
+}
+
+message GetConversationMessagesByTimeResponse {
+  bool has_more = 1;
+  int64 next_cursor = 2;
+  repeated MessageInfo message_list = 3;
+}
+
+// cmd=2036 message/mark —— 消息标记/取消标记
+message MarkMessageRequest {
+  string conversation_id = 1;
+  int32 conversation_type = 2;
+  int64 conversation_short_id = 3;
+  int64 server_message_id = 4;
+  int32 do_action = 5;
+  int32 action_type = 6;
+  int64 sort_time = 7;
+  int64 tag = 8;
+}
+
+message MarkMessageResponse {
+  int64 server_message_id = 1;
+  int64 check_code = 2;
+  string check_message = 3;
+  int32 status = 4;
+}
+
+// cmd=2021 message/modify_ext —— 修改消息扩展与内容
+message ModifyMessageExtRequest {
+  int64 conversation_short_id = 1;
+  int64 message_id = 2;
+  string ticket = 3;
+  map<string, string> ext = 4;
+  bool is_edited = 5;
+  string content = 6;
+  int32 conversation_type = 7;
+  int32 message_type = 8;
+  string conversation_id = 9;
+}
+
+message ModifyMessageExtResponse {
+  map<string, string> ext = 1;
+  int64 version = 2;
+}
+
+// cmd=12040 message/get_cmd_message_range —— 控制类消息区间
+message GetCmdMessageRangeRequest {
+  int64 cmd_index_v2 = 1;
+  int64 size = 2;
+  int32 direction = 3;
+  int64 cmd_message_chain_v2_index = 4;
+}
+
+message GetCmdMessageRangeResponse {
+  int64 cmd_index_v2 = 1;
+  int64 size = 2;
+  int32 direction = 3;
+  repeated ConversationMessage messages = 4;
+  int64 next_cmd_index_v2 = 5;
+  int64 cmd_message_chain_v2_index = 6;
+  int64 next_cmd_message_chain_v2_index = 7;
+}
+
+// cmd=12050 conversation/specified_message_list —— 指定类型消息列表
+message GetSpecifiedMessageListRequest {
+  int32 message_list_type = 1;
+  int64 conversation_short_id = 2;
+  int64 offset = 3;
+  int64 count = 4;
+}
+
+message GetSpecifiedMessageListResponse {
+  repeated ConversationMessage message_list = 1;
+  int64 next_offset = 2;
+  bool has_more = 3;
+}
+
+// cmd=611/612 conversation/get_by_favorite|get_by_top —— 收藏/置顶会话
+message GetConversationInfoListByFavoriteRequest {
+  int64 cursor = 1;
+  int64 limit = 2;
+}
+
+message GetConversationInfoListByTopRequest {
+  int64 cursor = 1;
+  int64 limit = 2;
+  int32 conversation_type = 3;
+}
+
+message ConversationListV2Response {
+  repeated ConversationV2 conversation_info_list = 1;
+  bool has_more = 2;
+  int64 next_cursor = 3;
+}
+
+// cmd=613 conversation/batch_mark_read —— 批量已读
+message BatchMarkConversationReadRequest {
+  repeated MarkConversationReadRequest mark_read_requests = 1;
+}
+
+// cmd=619 conversation/batch_delete —— 批量删除会话
+message BatchDeleteConversationRequest {
+  repeated DeleteConversationRequest mark_delete_requests = 1;
+}
+
+message BatchDeleteConversationResponse {
+  repeated int64 failed_conversation_short_ids = 1;
+}
+
+// cmd=620 conversation/clear_message —— 清空会话消息
+message ClearConversationMessageRequest {
+  string conversation_id = 1;
+  int64 conversation_short_id = 2;
+  int32 conversation_type = 3;
+  int64 last_message_index = 4;
+  int64 last_message_index_v2 = 5;
+  int64 last_msg_badge_count = 6;
+  int64 last_message_time = 8;
+  int64 total_thread_important_badge_count = 9;
+}
+
+message ClearConversationMessageV2Response {
+  bool show_empty_conv = 1;
+}
+
+// cmd=12060/12061 conversation/get_member_list|batch_get_member_list —— 成员列表
+message GetConversationMemberListRequest {
+  string conversation_id = 1;
+  int64 conversation_short_id = 2;
+  int32 conversation_type = 3;
+  int32 sync_scene = 4;
+  int64 local_member_version = 5;
+  int64 cursor = 6;
+  int64 limit = 7;
+}
+
+message ConversationMemberList {
+  string conversation_id = 1;
+  int64 conversation_short_id = 2;
+  int32 conversation_type = 3;
+  int64 member_version = 4;
+  int64 participants_count = 5;
+  ConversationParticipantsPage full_participants_page = 6;
+  int64 check_code = 100;
+  string check_msg = 101;
+}
+
+message GetConversationMemberListResponse {
+  ConversationMemberList member_list = 1;
+}
+
+message BatchGetConversationMemberListRequest {
+  repeated GetConversationMemberListRequest batch_member_list = 1;
+}
+
+message BatchGetConversationMemberListResponse {
+  repeated ConversationMemberList batch_member_list = 1;
+}
+
+// cmd=12062 conversation/get_recent_cmd_conv —— 最近控制类消息会话
+message GetRecentCmdConvRequest {
+  int64 cmd_message_conv_version = 1;
+  bool reverse = 2;
+  string source = 3;
+}
+
+message GetRecentCmdConvResponse {
+  repeated ConversationV2 conversation_info = 1;
+  bool has_more = 2;
+  int64 next_cmd_message_conv_version = 3;
+}
+
+// cmd=12063 conversation/get_recent_stranger_conv —— 最近陌生人会话
+message GetRecentStrangerConvRequest {
+  int64 max_version = 1;
+  int64 min_version = 2;
+  bool reverse = 3;
+  string source = 4;
+}
+
+message GetRecentStrangerConvResponse {
+  repeated ConversationV2 conversation_info = 1;
+  bool has_more = 2;
+  int64 next_version = 3;
+}
+
+// cmd=2205 conversation/update_thread_subscribe_status —— 盖楼订阅状态
+message UpdateThreadSubscribeStatusRequest {
+  string thread_id = 1;
+  int64 thread_short_id = 2;
+  int32 status = 3;
+}
+
+message UpdateThreadSubscribeStatusResponse {
+  int32 status = 1;
 }
 `
 

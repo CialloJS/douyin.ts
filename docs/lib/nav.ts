@@ -44,10 +44,18 @@ const api: Doc[] = [
   { slug: 'api/setting', file: 'api/setting.mdx', title: 'setting', summary: '账号与消息设置' },
 ]
 
+const app: Doc[] = [
+  { slug: 'app', file: 'app/index.mdx', title: 'App 通道', summary: '设备注册、App 登录与推送入口' },
+  { slug: 'app/message', file: 'app/message.mdx', title: 'App 消息', summary: '会话标识、收发消息与类型边界' },
+  { slug: 'app/events', file: 'app/events.mdx', title: 'App 事件', summary: '独立 Frontier 长连接与事件分流' },
+  { slug: 'app/api', file: 'app/api.mdx', title: 'App 接口', summary: 'App 原生协议方法目录' },
+]
+
 export const sections: Section[] = [
   { title: '指南', lead: '从安装到第一条消息', docs: guide },
   { title: '事件', lead: 'bot.on(event, fn)', docs: events },
   { title: 'API', lead: 'bot.域.动作', docs: api },
+  { title: 'App', lead: 'app 原生协议通道', docs: app },
 ]
 
 export function allDocs (): Doc[] {

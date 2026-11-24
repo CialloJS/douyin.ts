@@ -1,0 +1,176 @@
+import { Note, Warn } from '@/components/mdx/callout'
+
+# App 通道
+
+`App` 走抖音 Android 客户端原生协议，与 `Bot` 的 web 协议是两条独立通道：设备注册、passport 登录、IM 加密 pb、Frontier 长连接都不共用代码，只共用消息解析所需的 IM schema。
+
+`bot.app` 在 `Bot` 构造时就存在，但只有完成登录后，`start()` 才能建立推送长连接。
+
+## 构造
+
+```ts
+import { App } from 'douyin.ts'
+
+const app = new App({
+  // 已持久化的设备标识；省略时由 device() 注册
+  ids,
+  // 已持久化的登录 Cookie
+  cookie,
+})
+```
+
+`AppOpts` 还支持 `dev` 覆盖设备画像、`log` 注入日志器。画像必须与注册时一致，否则服务端会把请求判成另一台设备。
+
+## 设备注册
+
+```ts
+// 首次：注册并激活，服务端签发 device_id / iid / cookie
+const ids = await app.device()
+
+// 之后：传入已保存的 ids，每次启动重新激活
+const app = new App({ ids, cookie })
+await app.device()
+```
+
+| 选项 | 说明 |
+|------|------|
+| `force` | `true` 时丢弃旧 device_id 重新注册；旧登录态会全部失效 |
+| `host` | 覆盖注册/激活域名，一般不用 |
+
+<Note>
+`device()` 的返回值要落盘。`device_id`、`iid`、`cookie` 三者共同构成设备身份，缺一个都会在扫码确认阶段被判 7。
+</Note>
+
+## 登录
+
+### 扫码
+
+```ts
+const res = await app.qr({
+  onQr: qr => renderQr(qr.url ?? qr.base64),
+  onStatus: (status, code) => log(`${status} ${code}`),
+})
+
+if (res.ok) save({ ids, cookie: res.cookie })
+```
+
+二维码每 2 秒轮询一次，过期会自动换码。扫码成功后才把独立会话合并进主会话；取消或失败不会污染已有 Cookie。
+
+### 短信验证码
+
+```ts
+const res = await app.sms({
+  mobile: '13800000000',
+  onCode: () => ask('验证码'),
+  // 1105 滑块：起本地验证页，手机拖动通过后自动重填票据
+  slide: true,
+  // 2046 二次验证：按方式返回短信码或密码
+  onMfa: m => m.kind === 'password' ? password : ask(`${m.mobile ?? ''} 验证码`),
+})
+```
+
+### 密码
+
+```ts
+const res = await app.pwd({ mobile, password })
+```
+
+### 通用回调
+
+扫码、短信、密码共用 `VerifyOpts`：
+
+| 选项 | 说明 |
+|------|------|
+| `onQr` | 收到二维码（`url` + `base64`），用于渲染 |
+| `onStatus` | `(status, error_code)`，状态或错误码变化时回调 |
+| `onCaptcha` | 1105 滑块交给调用方，返回 `CaptchaCredential` 后自动重发 |
+| `slide` | `true` 或 `SlideOpts`（`port` / `timeoutMs` / `onUrl`），起本地验证页自动过滑块 |
+| `password` | 已输入的密码，2046 要求密码验证时直接复用 |
+| `onMfa` | 二次验证：返回短信码或密码；返回空串表示重发短信 |
+| `onWay` | 从 `ways` 中选择二次验证方式，返回 `verify_way` 名称或下标 |
+
+### 返回值
+
+`qr()`、`sms()`、`pwd()`、`mfa()` 都返回 `LoginRes`：
+
+| 字段 | 说明 |
+|------|------|
+| `ok` | 是否登录成功 |
+| `userId` | 登录后的数字 uid |
+| `cookie` | 完整登录 Cookie，构造 `App` / `Bot` 用 |
+| `ids` | 设备身份，需与 `cookie` 一起持久化 |
+| `data` | 最后一次 passport 响应的 `data` 原文 |
+| `ways` | 未提供 `onMfa` 时返回服务端可用的二次验证方式 |
+
+`ok === false` 时可看 `data.error_code`：`7` 为频繁、`1105` 为滑块、`2046` 为二次验证。
+
+<Warn>
+短信登录与密码登录当前均未完成，暂时按「不可用」对待，请优先使用扫码登录：
+
+- `send_code` 必须走客户端加密，明文请求会被判成旧客户端（`1049`）。
+- `1105` 滑块依赖本地验证页完成官方验证；自动通过需要本机安装 Edge/Chrome，且浏览器形态必须与注册设备的 WebView 画像一致，否则会被判 `5014` 频控。
+- `2046` 二次验证还需要提供短信码或密码，整条链路尚未端到端跑通验证。
+</Warn>
+
+### 手动收尾
+
+不传 `onMfa` 时，`LoginRes.ways` 会带服务端的验证方式；自行交互后调用 `app.mfa()`：
+
+```ts
+await app.mfa('sms', code)
+await app.mfa('password', password)
+await app.mfa('upsms')
+await app.mfa('qr', token)
+```
+
+### 滑块
+
+```ts
+const slide = await app.slide({ timeoutMs: 120_000 })
+const ok = await slide.wait()
+```
+
+也可以 `slide: true` 交给 `sms()` 自动处理，或用 `onCaptcha` 完全自定义。
+
+## 会话
+
+| 方法 | 用途 |
+|------|------|
+| `token()` | 当前 Cookie 与 uid |
+| `info()` | 账号信息（需已登录） |
+| `record(1 \| 2)` | 开启/关闭「保存登录信息」 |
+| `key()` | keyhub 握手的 IM 密钥（ticket + base64 key） |
+| `im(call)` | 直接调用 IM pb 接口 |
+| `ee(id?)` | 导出 ee.info 96B key 包，供外部进程复用 IM 会话 |
+
+## 发送消息
+
+```ts
+await app.send({
+  conversationId,
+  shortId,
+  type: 1,
+  body: { type: 'text', text: '你好' },
+})
+```
+
+图片、视频、文件可以直接传本地路径 / URL / 字节，SDK 会先在 Cookie 通道上传再发送。完整的消息类型、媒体写法与合并转发限制见 [App 消息](/docs/app/message)。
+
+## 拉历史
+
+```ts
+const list = await app.convList()
+const page = await app.history({ conversationId, shortId, type: 1, limit: 20 })
+```
+
+## 启动推送
+
+```ts
+app.on('message', msg => console.log(msg.conversationId, msg.text))
+
+await app.start()
+// ...
+app.stop()
+```
+
+`app.connected` 表示当前长连接是否在线。连接与事件细节见 [App 事件](/docs/app/events)。

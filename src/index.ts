@@ -1,12 +1,22 @@
 /** 抖音 Node SDK 唯一出口：运行时只导出 Bot/工具/登录/解密与错误类型 */
 
 export { Bot } from './bot/bot.js'
+export { App } from './app/index.js'
 export { chatIdOf } from './bot/address.js'
 export { login } from './session/login/login.js'
 export { decryptCencMp4 } from './media/cenc.js'
 export { createLog } from './session/log.js'
 export { SdkError, isErr } from './error.js'
 export type { LoginOpts, Session, MfaInfo, QrStatus, VerifyWay } from './session/login/types.js'
+export type {
+  AppOpts, Dev, Ids, LoginData, CaptchaCredential, MfaCtx,
+  MfaAsk, VerifyOpts, SmsOpts, PwdOpts, CodeRes, LoginRes, DeviceOpts,
+  Challenge, ImRes, ImCall, ImName, Res, EeEntry, Slide, SlideOpts,
+  ConvId, ConvPage, HistoryOpts, ReadOpts, UserMsgOpts, ApplyOpts,
+  SendOpts, CreateOpts, AuditOpts, StrangerOpts, RecentStrangerOpts,
+} from './app/index.js'
+export type { VerifyWay as AppWay } from './app/index.js'
+export type { ImEventMap as AppEventMap, ImEvent as AppEvent } from './types.js'
 export type {
   BotOpts, BotEvent, BotEventMap, BotMessage,
   Device, Log,

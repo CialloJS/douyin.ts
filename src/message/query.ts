@@ -2,13 +2,13 @@ import { LONG } from '../session/pb.js'
 import { actionResponse } from '../chat/map.js'
 import type { ActionResult, ClientAckItem, InboxContext, StrangerListOptions, UserMessageQuery } from '../types.js'
 
-/** cmd=2048 get_user_message:按 uid 消息区间查询（HAR 响应字段全 0，返回原始结构） */
+/** cmd=12048 get_user_message:按 uid 消息区间查询（HAR 响应字段全 0，返回原始结构） */
 export async function getUserMessage (
   ctx: InboxContext,
   req: UserMessageQuery = {},
 ): Promise<Record<string, unknown>> {
   const decoded = await ctx.transport.sendCookieProto(
-    2048,
+    12048,
     req.inboxType ?? 0,
     '/v1/message/get_user_message',
     {
