@@ -138,8 +138,9 @@ await app.send({
 ```
 
 - 真实节点（带 `msgId`）会先调 `mergePrepare` 注册原消息，再把 `verified_content` 作为 136 内容发出。
+- `mergePrepare` 实测可用：返回 `verified_content`（内含 `upload_key_list` 与 `skey`），说明云端记录注册成功。
+- 发送侧仍受阻：本账号 App 发送（文本/表情/合并转发）统一返回 `statusCode=4 invalid request`（此前为 `7100` 风控），属账号/设备写限制，无法验证 136 落库与点开内容。
 - 任一节点缺省 `msgId` 时跳过注册，SDK 用伪 id 直接发摘要卡。
-- 当前 136 实测返回 `status=0` 但服务端不落库，`app.history` 查不到；同一会话的 58 / 110 / 150 都能回读，说明发送还缺字段。
 - 抖音卡片只存 `msg_ids` 引用，点开后按 id 拉原消息，因此只能伪造外层昵称/摘要/时间/顺序，无法伪造正文。详见 [msg · 合并转发](/docs/api/msg)。
 
 ## 拉历史

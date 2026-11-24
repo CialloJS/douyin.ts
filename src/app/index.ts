@@ -45,6 +45,7 @@ export type {
   ExtOpts,
   DelOpts,
   ThreadSubOpts,
+  ReactOpts,
 } from './conv.js'
 export type { ApplyOpts } from './friend.js'
 export type { EeEntry } from './ee.js'

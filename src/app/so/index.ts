@@ -1,16 +1,10 @@
 /** x-medusa 真机同源签名：设备注册/激活必须解释执行 libmetasec_ml.so，纯算会被风控判 device_id=0 */
-import { existsSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
+import { findAsset } from '../../asset.js'
 import { SoSigner } from './signer.js'
 
-/** 源码运行与打包运行的位置不同，按候选目录找内置资产 */
-const here = dirname(fileURLToPath(import.meta.url))
-const root = [
-  resolve(here, '../../../assets'),
-  resolve(here, '../assets'),
-  resolve(process.cwd(), 'assets'),
-].find(dir => existsSync(join(dir, 'libmetasec_ml.so')))
+/** 找不到资源时留空，等到真正签名再报错，避免仅导入即崩 */
+const root = findAsset('libmetasec_ml.so')
 
 export interface SoIds {
   deviceId?: string

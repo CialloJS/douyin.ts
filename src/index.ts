@@ -13,7 +13,7 @@ export type {
   MfaAsk, VerifyOpts, SmsOpts, PwdOpts, CodeRes, LoginRes, DeviceOpts,
   Challenge, ImRes, ImCall, ImName, Res, EeEntry, Slide, SlideOpts,
   ConvId, ConvPage, HistoryOpts, ReadOpts, UserMsgOpts, ApplyOpts,
-  SendOpts, CreateOpts, AuditOpts, StrangerOpts, RecentStrangerOpts,
+  SendOpts, CreateOpts, AuditOpts, StrangerOpts, RecentStrangerOpts, ReactOpts,
 } from './app/index.js'
 export type { VerifyWay as AppWay } from './app/index.js'
 export type { ImEventMap as AppEventMap, ImEvent as AppEvent } from './types.js'

@@ -1,22 +1,8 @@
 /** a0_ 设备证明：解释执行 libnative_log.so，生成 NativeLogManager 的 MMapResult */
-import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { uptime } from 'node:process'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { assetDir } from '../asset.js'
 import { SoSigner } from './so/signer.js'
-
-const here = dirname(fileURLToPath(import.meta.url))
-
-/** 源码运行与打包运行的位置不同，按候选目录找内置资产 */
-function assetDir (name: string): string {
-  const dir = [
-    resolve(here, '../../assets'),
-    resolve(here, '../assets'),
-    resolve(process.cwd(), 'assets'),
-  ].find(d => existsSync(join(d, name)))
-  if (!dir) throw new Error(`找不到 assets/${name}`)
-  return dir
-}
 
 /** Java_ 静态注册的导出名，直接按 ELF 符号调用 */
 const EXPORT = 'Java_com_ss_android_deviceregister_nativeManager_NativeLogManager_getMMMapResult'

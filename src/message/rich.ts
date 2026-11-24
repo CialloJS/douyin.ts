@@ -137,8 +137,9 @@ export function buildCardContent (card: Card, title: string): string {
   })
 }
 
-/** 构造表情消息 content（messageType=5 / lite_emoji）：字段与官方发送样本逐一同形（含 aweType:507、url.width:0）；url 必须传 im-resource 域直链，tos-cn 表态域会被服务端注入 s:visible 导致仅自身可见 */
+/** 构造表情消息 content（messageType=5 / lite_emoji）：字段与官方发送样本逐一同形；url 必须传 im-resource 域直链，tos-cn 表态域会被服务端注入 s:visible 导致仅自身可见 */
 export function buildEmojiContent (url: string, displayName = '[表情]'): string {
+  // 字段对齐真机 action_bar 小表情：缺 emoji_from/emoji_type/sticker_type 会被部分场景当普通图片
   return JSON.stringify({
     display_name: displayName,
     height: 100,
@@ -148,8 +149,13 @@ export function buildEmojiContent (url: string, displayName = '[表情]'): strin
     package_id: 0,
     show_notice: false,
     resource_type: 4,
+    emoji_from: 'action_bar',
+    emoji_source: 'system_provided',
+    emoji_type: 'lite_emoji',
+    sticker_type: 12,
+    version: '2',
     updateConversationTime: true,
-    url: { height: 0, data_size: 0, uri: url, url_list: [url], width: 0 },
+    url: { height: 100, data_size: 0, uri: url, url_list: [url], width: 100 },
     createdAt: 0,
     is_card: false,
     msgHint: '',

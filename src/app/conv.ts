@@ -199,6 +199,14 @@ export interface ThreadSubOpts {
   status: number
 }
 
+export interface ReactOpts extends ConvId {
+  messageId: string | number
+  /** 表情键值，如 [爱心] */
+  emoji: string
+  /** 默认添加回应，false 取消 */
+  enabled?: boolean
+}
+
 /** path 以真机抓包为准：get_read_index/get_min_index 在 /v3 下 */
 const PATH = {
   list: '/v1/conversation/list',
@@ -256,8 +264,8 @@ export class Conv {
     private readonly ids: Ids,
   ) {}
 
-  private call (path: string, cmd: number, field: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return pbQuery(this.im, this.dev, this.ids, path, cmd, field, body)
+  private call (path: string, cmd: number, field: string, body: Record<string, unknown>, ok?: number[]): Promise<Record<string, unknown>> {
+    return pbQuery(this.im, this.dev, this.ids, path, cmd, field, body, ok)
   }
 
   /** 会话列表（cmd=2006） */
@@ -648,6 +656,26 @@ export class Conv {
       threadShortId: opts.threadShortId,
       status: opts.status,
     })
+  }
+
+  /** 表情回应（cmd=705）：key 以 se:<键值> 下发，幂等命中服务端回 statusCode=1 */
+  async react (opts: ReactOpts): Promise<Record<string, unknown>> {
+    return this.call('/v1/message/set_property', 705, 'modifyMessageProperty', {
+      propertyList: [{
+        conversationId: opts.conversationId ?? '',
+        conversationShortId: opts.shortId,
+        conversationType: opts.type ?? 1,
+        serverMessageId: opts.messageId,
+        clientMessageId: '',
+        modifyPropertyContent: [{
+          operation: opts.enabled === false ? 1 : 0,
+          key: `se:${opts.emoji}`,
+          value: '',
+          idempotentId: await this.im.uid(),
+        }],
+      }],
+      ticket: '',
+    }, [0, 1])
   }
 
   /** 会话悬浮条是否展示 */

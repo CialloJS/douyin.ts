@@ -1,10 +1,11 @@
 /** 本地静态资源:React 运行时与官方 SecondVerify SDK */
 import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
+import { assetDir } from '../../asset.js'
 
 /** 资源随包发布,运行期只读盘一次 */
 function asset (file: string): Promise<Buffer> {
-  return readFile(fileURLToPath(new URL(`../../../assets/${file}`, import.meta.url)))
+  return readFile(join(assetDir(file), file))
 }
 
 export function loadReact (): Promise<[Buffer, Buffer]> {

@@ -30,7 +30,7 @@
 | core/im/protocol/* | src/im/protocol/* | codec / proto / wire / ws 原样移植 |
 | core/im/{transport,receiver,notifications,send,inbox,upload,media,content,types} | src/im/* | 文件名缩短 |
 | core/im/client.ts | src/bot.ts | 重组为分组式 Bot 门面 |
-| resources/verification/*.js、react UMD | assets/ | 验证页静态资源随包发布 |
+| resources/verification/*.js、react UMD；App 签名 .so | assets/ | 验证页资源与 native 库必须随包发布，否则签名不可用 |
 | adapter/*、apps/*、core/store/* | 不移植 | 超出范围 |
 
 ## 目标结构
@@ -49,7 +49,7 @@ src/
   sign/         # bogus.ts ac.ts aid.ts mix.ts qs.ts browser.ts source.ts frontier.ts const.ts
   im/           # types.ts content.ts transport.ts recv.ts notice.ts send.ts inbox.ts upload.ts media.ts im.ts
     protocol/   # codec.ts proto.ts wire.ts ws.ts
-assets/         # second-verify.js + react UMD（验证页资源）
+assets/         # 验证页资源 + App 签名 .so（必须随包发布）
 ```
 
 ## API 形态

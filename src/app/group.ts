@@ -12,7 +12,7 @@ export class Group {
     return rest(this.im, '/aweme/v1/im/group/list/self/', { host: DOMAIN.social, query })
   }
 
-  /** 群指标（周期维度） */
+  /** 群指标（body: conversation_short_id / periods / indicator_types 均必填） */
   indicators (body: Record<string, unknown>): Promise<Record<string, unknown>> {
     return rest(this.im, '/aweme/v1/im/group_v2/get_group_indicators', {
       host: DOMAIN.social,
@@ -39,20 +39,20 @@ export class Group {
     })
   }
 
-  /** 群打卡信息 */
+  /** 群打卡信息（body: group_id） */
   checkin (body: Record<string, unknown>): Promise<Record<string, unknown>> {
     return rest(this.im, '/interest/checkin/conversation/info/get', {
       host: DOMAIN.platform,
-      enc: 'form',
+      enc: 'json',
       body,
     })
   }
 
-  /** 群打卡权限校验 */
+  /** 群打卡权限校验（body: conversation_id 传短 id 字符串） */
   checkinAuth (body: Record<string, unknown>): Promise<Record<string, unknown>> {
     return rest(this.im, '/interest/checkin/conversation/auth/check', {
       host: DOMAIN.platform,
-      enc: 'form',
+      enc: 'json',
       body,
     })
   }
@@ -71,12 +71,12 @@ export class Group {
     return rest(this.im, '/aweme/v1/im/group_v2/operation/scan', { host: DOMAIN.social, query })
   }
 
-  /** 群标签扫描 */
+  /** 群标签扫描（query: conv_short_id / cursor / limit / choose，choose 如 active_info_item） */
   tags (query?: Query): Promise<Record<string, unknown>> {
     return rest(this.im, '/aweme/v1/im/group_v2/tag/scan', { host: DOMAIN.social, query })
   }
 
-  /** 群活跃信息 */
+  /** 群活跃信息（body 需 group_id + with_active_info/with_fans_info/with_common_label_info 全为 1） */
   active (body: Record<string, unknown>): Promise<Record<string, unknown>> {
     return rest(this.im, '/aweme/v1/im/group/active_info/get', {
       host: DOMAIN.social,
@@ -142,7 +142,7 @@ export class Group {
     return rest(this.im, '/aweme/v1/im/group_v2/recom_fold_groups', { host: DOMAIN.social, query })
   }
 
-  /** 群任务列表 */
+  /** 群任务列表（query: group_id / scene，scene 取值如 upgrade_public_group） */
   tasks (query?: Query): Promise<Record<string, unknown>> {
     return rest(this.im, '/aweme/v1/im/group_v2/group_task/list', { host: DOMAIN.social, query })
   }
@@ -173,5 +173,66 @@ export class Group {
   /** 群聊词库设置 */
   words (query?: Query): Promise<Record<string, unknown>> {
     return rest(this.im, '/aweme/v1/im/group/settings/words/', { host: DOMAIN.social, query })
+  }
+
+  /** 群广场热点（body: source / existing_hotspot_ids / biz_ext） */
+  hotspot (body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return rest(this.im, '/aweme/v1/im/group_v2/distribution/hotspot/', {
+      host: DOMAIN.social,
+      enc: 'json',
+      body,
+    })
+  }
+
+  /** 群广场推荐（body: source / existing_group_ids / biz_ext） */
+  recommend (body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return rest(this.im, '/aweme/v1/im/group_v2/distribution/recommend', {
+      host: DOMAIN.social,
+      enc: 'json',
+      body,
+    })
+  }
+
+  /** 群广场信息 */
+  square (body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return rest(this.im, '/aweme/v1/im/group_v2/distribution/square_info/', {
+      host: DOMAIN.social,
+      enc: 'json',
+      body,
+    })
+  }
+
+  /** 群广场搜索（body: source / query / cursor / limit / biz_ext） */
+  searchGroups (body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return rest(this.im, '/aweme/v1/im/group_v2/distribution/search', {
+      host: DOMAIN.social,
+      enc: 'json',
+      body,
+    })
+  }
+
+  /** 群操作前置校验 */
+  actionCheck (query?: Query): Promise<Record<string, unknown>> {
+    return rest(this.im, '/aweme/v1/im/group_v2/action/check', { host: DOMAIN.social, query })
+  }
+
+  /** 按群 id 批量取群（group_ids 逗号串） */
+  others (query?: Query): Promise<Record<string, unknown>> {
+    return rest(this.im, '/aweme/v1/im/group/list/other/', { host: DOMAIN.social, query })
+  }
+
+  /** 建群面板信息 */
+  panel (query?: Query): Promise<Record<string, unknown>> {
+    return rest(this.im, '/aweme/v1/im/group_v2/creation_panel_info/get', { host: DOMAIN.social, query })
+  }
+
+  /** 可邀请的粉丝列表（query: limit / scene，scene=0 才返回 fans_list） */
+  fansList (query?: Query): Promise<Record<string, unknown>> {
+    return rest(this.im, '/aweme/v1/im/group/invite/fans_list', { host: DOMAIN.social, query })
+  }
+
+  /** 粉丝群卡片状态（query: from / to_sec_uid / is_new_style） */
+  fansCard (query?: Query): Promise<Record<string, unknown>> {
+    return rest(this.im, '/aweme/v1/im/group/get_fans_group_card/', { host: DOMAIN.social, query })
   }
 }

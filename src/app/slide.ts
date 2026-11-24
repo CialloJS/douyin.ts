@@ -1,10 +1,10 @@
 /** 1105 滑块本地验证页：官方 bdturing SDK 在本次决策上完成验证，通过后上层自动回填票据重发 */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import * as http from 'node:http'
 import * as os from 'node:os'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { createLog } from '../session/log.js'
+import { findAsset } from '../asset.js'
 import { solve } from './auto.js'
 import type { Auth } from './auth.js'
 import type { Challenge } from './captcha.js'
@@ -35,13 +35,8 @@ const PAGE_HOST = 'https://verify.zijieapi.com'
 /** HAR 里 /captcha/* 只带这一个 cookie；串入 passport 会话会暴露「同一 did 既像浏览器又持有 App 会话」 */
 const CAPTCHA_COOKIE = 'ticket_guard_has_set_public_key=1'
 
-/** 源码运行与打包运行位置不同，按候选目录找内置 SDK 副本 */
-const here = dirname(fileURLToPath(import.meta.url))
-const SDK_DIR = [
-  resolve(here, '../../../assets'),
-  resolve(here, '../assets'),
-  resolve(process.cwd(), 'assets'),
-].find(dir => existsSync(join(dir, 'captcha.1.0.0.1007.js')))
+/** 内置 SDK 副本；缺失时留空，让上层跳过滑块 */
+const SDK_DIR = findAsset('captcha.1.0.0.1007.js')
 const SDK_FILE = SDK_DIR ? join(SDK_DIR, 'captcha.1.0.0.1007.js') : ''
 
 export interface SlideOpts {

@@ -237,13 +237,17 @@ const API: Record<string, (arg: string) => Promise<unknown>> = {
   chains: arg => bot.app.chains(json(arg)),
   memberSettings: arg => bot.app.memberSettings(json(arg)),
   indicators: arg => bot.app.indicators(json(arg)),
+  checkin: arg => bot.app.checkin(json(arg)),
+  checkinAuth: arg => bot.app.checkinAuth(json(arg)),
+  groupTags: arg => bot.app.groupTags(json(arg) as Record<string, string | number>),
+  active: arg => bot.app.active(json(arg)),
   albumAdd: arg => bot.app.albumAdd(json(arg)),
   userRecommend: arg => bot.app.userRecommend(json(arg)),
   groupNumber: arg => bot.app.groupNumber(arg),
   mixPhoto: () => bot.app.mixPhoto(),
-  validate: () => bot.app.validate(),
-  upgrade: () => bot.app.upgrade(),
-  upgrades: () => bot.app.upgrades(),
+  validate: arg => bot.app.validate(json(arg) as Record<string, string | number>),
+  upgrade: arg => bot.app.upgrade(json(arg) as Record<string, string | number>),
+  upgrades: arg => bot.app.upgrades(json(arg) as Record<string, string | number>),
   stranger: () => bot.app.strangerList(),
   audit: () => bot.app.auditList(),
   recent: () => bot.app.recentStranger(),
@@ -257,11 +261,20 @@ const API: Record<string, (arg: string) => Promise<unknown>> = {
   convOther: arg => bot.app.convOther(json(arg)),
   openApps: arg => bot.app.openApps(json(arg)),
   foldGroups: () => bot.app.foldGroups(),
-  groupTasks: () => bot.app.groupTasks(),
+  groupTasks: arg => bot.app.groupTasks(json(arg) as Record<string, string | number>),
   groupTaskUpdate: arg => bot.app.groupTaskUpdate(json(arg)),
   groupMultiCheck: arg => bot.app.groupMultiCheck(json(arg)),
   entryLimit: () => bot.app.entryLimit(),
   groupWords: () => bot.app.groupWords(),
+  groupHotspot: arg => bot.app.groupHotspot(json(arg)),
+  groupRecommend: arg => bot.app.groupRecommend(json(arg)),
+  groupSquare: arg => bot.app.groupSquare(json(arg)),
+  groupSearch: arg => bot.app.groupSearch(json(arg)),
+  groupActionCheck: arg => bot.app.groupActionCheck(json(arg) as Record<string, string | number>),
+  groupOthers: arg => bot.app.groupOthers(json(arg) as Record<string, string | number>),
+  groupPanel: arg => bot.app.groupPanel(json(arg) as Record<string, string | number>),
+  groupFansList: arg => bot.app.groupFansList(json(arg) as Record<string, string | number>),
+  groupFansCard: arg => bot.app.groupFansCard(json(arg) as Record<string, string | number>),
   imConfig: () => bot.app.imConfig(),
   globalConfig: () => bot.app.globalConfig(),
   strategyConfig: () => bot.app.strategyConfig(),
@@ -320,6 +333,7 @@ const HELP: Array<[string, string, string]> = [
   ['stop', '断开 App 推送', 'disconnect App push'],
   ['self', '本人主页', 'my profile'],
   ['groups', '我加入的群列表', 'my groups'],
+  ['react <conversationId> <shortId> <messageId> <emoji> [del]', '表情回应，del 取消', 'message reaction, del to remove'],
   ['applies', '好友申请列表', 'friend applies'],
   ['api <name> [json]', '其它业务接口，name 不带参数时打印可选列表', 'other business APIs'],
   ['state', '查看本地设备标识与登录态', 'show local device ids & session'],
@@ -414,6 +428,20 @@ async function run (name: string, args: string[]): Promise<void> {
     log.info(`本人主页:\n${pretty(await bot.app.self())}`)
   } else if (name === 'groups') {
     log.info(`群列表:\n${pretty(await bot.app.groups())}`)
+  } else if (name === 'react') {
+    const [conversationId, shortId, messageId, emoji, flag] = args
+    if (!conversationId || !messageId || !emoji) {
+      log.warn('用法: react <conversationId> <shortId> <messageId> <emoji> [del]')
+      return
+    }
+    log.info(`回应结果:\n${pretty(await bot.app.react({
+      conversationId,
+      shortId,
+      type: 2,
+      messageId,
+      emoji,
+      enabled: flag !== 'del',
+    }))}`)
   } else if (name === 'applies') {
     log.info(`好友申请:\n${pretty(await bot.app.applies())}`)
   } else if (name === 'api') {

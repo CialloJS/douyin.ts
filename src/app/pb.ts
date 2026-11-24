@@ -76,10 +76,13 @@ export async function pbQuery (
   cmd: number,
   field: string,
   body: Record<string, unknown>,
+  /** 额外视为成功的 statusCode：写操作幂等命中时服务端回 1 */
+  ok: number[] = [],
 ): Promise<Record<string, unknown>> {
   const res = await im.call({ path, enc: 'pb', body: pack(dev, ids, { cmd, field, body, token: await im.token(), path }) })
   const env = unpack(res)
-  if (Number(env.statusCode ?? 0) !== 0) {
+  const status = Number(env.statusCode ?? 0)
+  if (status !== 0 && !ok.includes(status)) {
     throw new Error(`${path} 失败 statusCode=${String(env.statusCode)} ${String(env.errorDesc ?? '')}`)
   }
   return (env.body ?? {}) as Record<string, unknown>

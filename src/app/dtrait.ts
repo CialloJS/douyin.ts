@@ -1,24 +1,10 @@
 /** 设备证明与场景报告：x-tt-device-dtrait 走 native_log 的 a0_，x-bb-* 走 badger */
 import { constants, createPublicKey, publicEncrypt } from 'node:crypto'
-import { existsSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
+import { assetDir } from '../asset.js'
 import { SoSigner } from './so/signer.js'
 import { mmap } from './nlog.js'
 import type { Ids } from './types.js'
-
-/** 源码运行与打包运行的位置不同，按候选目录找内置资产 */
-const here = dirname(fileURLToPath(import.meta.url))
-
-function assetDir (name: string): string {
-  const dir = [
-    resolve(here, '../../assets'),
-    resolve(here, '../assets'),
-    resolve(process.cwd(), 'assets'),
-  ].find(d => existsSync(join(d, name)))
-  if (!dir) throw new Error(`找不到 assets/${name}`)
-  return dir
-}
 
 /** 登录场景号（BadgerDtraitReporter 里 passport 走的 scene） */
 const SCENE = 17

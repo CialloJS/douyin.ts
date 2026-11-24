@@ -11,7 +11,7 @@ import { Im, type Call, type ImRes } from './im.js'
 import { eeEntry, type EeEntry } from './ee.js'
 import { read, type Challenge } from './captcha.js'
 import { serve, type Slide, type SlideOpts } from './slide.js'
-import { Conv, type ConvId, type ConvPage, type HistoryOpts, type ReadOpts, type UserMsgOpts, type SendOpts, type CreateOpts, type AuditOpts, type StrangerOpts, type RecentStrangerOpts, type MemberOpts, type MarkOpts, type CmdOpts, type RangeOpts, type InitOpts, type ThreadOpts, type TimeOpts, type CmdRangeOpts, type SpecifiedOpts, type MsgMarkOpts, type ExtOpts, type DelOpts, type ThreadSubOpts } from './conv.js'
+import { Conv, type ConvId, type ConvPage, type HistoryOpts, type ReadOpts, type UserMsgOpts, type SendOpts, type CreateOpts, type AuditOpts, type StrangerOpts, type RecentStrangerOpts, type MemberOpts, type MarkOpts, type CmdOpts, type RangeOpts, type InitOpts, type ThreadOpts, type TimeOpts, type CmdRangeOpts, type SpecifiedOpts, type MsgMarkOpts, type ExtOpts, type DelOpts, type ThreadSubOpts, type ReactOpts } from './conv.js'
 import { Account } from './account.js'
 import { Notice } from './notice.js'
 import { Friend, type ApplyOpts } from './friend.js'
@@ -341,6 +341,11 @@ export class App {
   /** 发送消息（pb cmd=100）；媒体输入源自动上传，forward 走 App 域注册 */
   send (opts: SendOpts): Promise<Record<string, unknown>> {
     return this.sender.send(opts)
+  }
+
+  /** 表情回应（pb cmd=705）；emoji 传键值如 [爱心]，false 取消 */
+  react (opts: ReactOpts): Promise<Record<string, unknown>> {
+    return this.conv.react(opts)
   }
 
   /** 创建会话（pb cmd=609） */
@@ -836,6 +841,51 @@ export class App {
   /** 群聊词库设置 */
   groupWords (query?: Record<string, string | number>): Promise<Record<string, unknown>> {
     return this.group.words(query)
+  }
+
+  /** 群广场热点 */
+  groupHotspot (body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.group.hotspot(body)
+  }
+
+  /** 群广场推荐 */
+  groupRecommend (body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.group.recommend(body)
+  }
+
+  /** 群广场信息 */
+  groupSquare (body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.group.square(body)
+  }
+
+  /** 群广场搜索 */
+  groupSearch (body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.group.searchGroups(body)
+  }
+
+  /** 群操作前置校验 */
+  groupActionCheck (query?: Record<string, string | number>): Promise<Record<string, unknown>> {
+    return this.group.actionCheck(query)
+  }
+
+  /** 按群 id 批量取群 */
+  groupOthers (query?: Record<string, string | number>): Promise<Record<string, unknown>> {
+    return this.group.others(query)
+  }
+
+  /** 建群面板信息 */
+  groupPanel (query?: Record<string, string | number>): Promise<Record<string, unknown>> {
+    return this.group.panel(query)
+  }
+
+  /** 可邀请的粉丝列表 */
+  groupFansList (query?: Record<string, string | number>): Promise<Record<string, unknown>> {
+    return this.group.fansList(query)
+  }
+
+  /** 粉丝群卡片状态 */
+  groupFansCard (query?: Record<string, string | number>): Promise<Record<string, unknown>> {
+    return this.group.fansCard(query)
   }
 
   /** 客户端 IM 配置 */
